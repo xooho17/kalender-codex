@@ -13,7 +13,7 @@ features**, **minor/nit = sweep when you're in the area**.
 
 ## 1. Architecture
 
-The module layering described in `CLAUDE.md` (`config → supabaseClient → api
+The module layering described in `AGENTS.md` (`config → supabaseClient → api
 → app ← ui`, with `store` and `dateUtils` as leaves) holds in practice. No
 import cycles. State lives in one place (`store.js`'s `state` object), every
 Supabase call is in `api.js`, every DOM read/write is in `ui.js`. That much
@@ -113,7 +113,7 @@ mark genuinely abnormal conditions.
 ### 2.3 [important] `handleEventSubmit` duplicates the optimistic pattern by hand
 
 `app.js:542-587` is the single mutation that does NOT use
-`withOptimisticUpdate`. Per the CLAUDE.md note this is intentional — the
+`withOptimisticUpdate`. Per the AGENTS.md note this is intentional — the
 "temporary id then reconcile" shape is hard to fold into the helper. But
 inside the body there are two real bugs and one pessimization:
 
@@ -196,7 +196,7 @@ during a slow network feels broken on mobile. Use `withOptimisticUpdate`.
 `supabase/feature_updates.sql:101-114` defines a one-arg function. The
 calendar-scoped tags migration (`2026-05-calendar-scoped-tags.sql:144`)
 drops it and creates the two-arg version. A user replaying the migrations
-on a fresh project in the order documented in CLAUDE.md will be fine.
+on a fresh project in the order documented in AGENTS.md will be fine.
 But a partial replay (`feature_updates.sql` then nothing else) leaves
 a one-arg function that's no longer referenced. Not a bug, just dead.
 
@@ -378,7 +378,7 @@ unenforced consistency.
 `feature_updates.sql:101-114` (one-arg `can_use_tag`) and the helpers in
 `rls_fix_calendars.sql:12-57` re-create what `schema.sql` already defines.
 On a from-scratch project the order is "schema.sql then nothing else."
-On an existing project the right order is documented in `CLAUDE.md`. The
+On an existing project the right order is documented in `AGENTS.md`. The
 files do their job, but new readers get confused by the same function
 defined three places. Consider moving the historical `feature_updates.sql`
 under a `supabase/legacy/` folder (without changing the file content,

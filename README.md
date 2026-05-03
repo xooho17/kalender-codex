@@ -59,14 +59,14 @@ two real causes are:
 Fix by creating/confirming the user in Supabase Studio → Authentication →
 Users on the project the key actually points at.
 
-#### Claude Preview integration
+#### Codex Preview integration
 
-`.claude/launch.json` registers the static server with the Claude Preview
+`.Codex/launch.json` registers the static server with the Codex Preview
 tool so a session can start it, screenshot it, and read browser console logs
 without leaving the chat:
 
 ```jsonc
-// .claude/launch.json
+// .Codex/launch.json
 {
   "version": "0.0.1",
   "configurations": [
@@ -84,19 +84,19 @@ without leaving the chat:
 }
 ```
 
-The `wsl.exe` wrapper is needed because Claude Code runs on Windows while the
+The `wsl.exe` wrapper is needed because Codex runs on Windows while the
 project lives inside WSL (`\\wsl.localhost\ubuntu\…`). Node is installed in
 WSL, not on the Windows PATH, so a direct `node server.mjs` from the Windows
 side fails with `ENOENT`. WSL2's localhost forwarder makes `127.0.0.1:4173`
 reachable from the Windows-side preview pane automatically. If you switch
-distro or the WSL home path, update `-d` and `--cd`. If you run Claude Code
+distro or the WSL home path, update `-d` and `--cd`. If you run Codex
 natively on macOS/Linux against a checked-out copy, replace the entry with:
 
 ```jsonc
 { "name": "kalender", "runtimeExecutable": "node", "runtimeArgs": ["server.mjs"], "port": 4173 }
 ```
 
-To use it inside a session: ask Claude to "start the preview server" — it
+To use it inside a session: ask Codex to "start the preview server" — it
 will call `preview_start` on the `kalender` config, and from there it can
 screenshot the page, evaluate JS in the page context, and tail the browser
 console while you click around.
@@ -182,7 +182,7 @@ There is no CI configuration for tests — they're a local pre-deploy gate.
 
 Architectural invariants (module layering, optimistic-update pattern, the
 three-field tag rule, RLS policies, the schema-change runbook) live in
-[CLAUDE.md](CLAUDE.md). Read it before making non-trivial changes.
+[AGENTS.md](AGENTS.md). Read it before making non-trivial changes.
 
 ## Tags and archiving
 
@@ -345,7 +345,7 @@ RLS, optimistic updates, and tag selection all work identically for events
 and tasks.
 
 Specific UI invariants (day-detail flow, full-width day columns, no desktop
-sidebars) live in [CLAUDE.md](CLAUDE.md) under "Mobile UI constraints" — read
+sidebars) live in [AGENTS.md](AGENTS.md) under "Mobile UI constraints" — read
 those before changing layout.
 
 ## GitHub Pages deployment
