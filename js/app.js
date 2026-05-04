@@ -191,6 +191,13 @@ function bindUiEvents() {
         openTypePicker(state.dayDetailDate || state.selectedDate);
         return;
       }
+      if (tab.dataset.tab === 'calendar') {
+        state.view = 'month';
+        state.dayDetailDate = null;
+        setActivePanel('calendar');
+        refreshEventsAndRender();
+        return;
+      }
       setActivePanel(tab.dataset.tab);
     });
   });
