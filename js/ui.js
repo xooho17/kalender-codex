@@ -243,29 +243,51 @@ export function renderTags() {
 
       const group = document.createElement('section');
       group.className = 'tag-group';
+      const previewTags = calendarTags.slice(0, 5);
       group.innerHTML = `
-        <header class="tag-group-header">
-          <strong>${escapeHtml(calendar.name)}</strong>
-          ${editable ? `<button class="ghost-action tag-group-add" type="button" data-tag-add-calendar-id="${calendar.id}">+ Add tag</button>` : '<span class="role-pill">view only</span>'}
-        </header>
-        ${
-          calendarTags.length
-            ? calendarTags
+        <details class="tag-group-details">
+          <summary class="tag-group-summary">
+            <span class="tag-group-title">
+              <strong>${escapeHtml(calendar.name)}</strong>
+              <small>${calendarTags.length} tag${calendarTags.length === 1 ? '' : 's'}</small>
+            </span>
+            <span class="tag-preview" aria-hidden="true">
+              ${previewTags
                 .map(
-                  (tag) => `
-                    <div class="tag-list-item" data-tag-id="${tag.id}">
-                      <span class="tag-dot" style="--tag-color:${safeColor(tag.color)}"></span>
-                      <strong>${escapeHtml(tag.name)}</strong>
-                      ${editable ? `
-                        <button class="tag-edit" type="button">Edit</button>
-                        <button class="tag-delete" type="button">Delete</button>
-                      ` : ''}
-                    </div>
-                  `,
+                  (tag) =>
+                    `<span class="tag-preview-dot" style="--tag-color:${safeColor(tag.color)}"></span>`,
                 )
-                .join('')
-            : '<p class="empty-note">No tags yet.</p>'
-        }
+                .join('')}
+            </span>
+          </summary>
+          <div class="tag-group-menu">
+            <div class="tag-group-actions">
+              ${
+                editable
+                  ? `<button class="ghost-action tag-group-add" type="button" data-tag-add-calendar-id="${calendar.id}">+ Add tag</button>`
+                  : '<span class="role-pill">view only</span>'
+              }
+            </div>
+            ${
+              calendarTags.length
+                ? calendarTags
+                    .map(
+                      (tag) => `
+                        <div class="tag-list-item" data-tag-id="${tag.id}">
+                          <span class="tag-dot" style="--tag-color:${safeColor(tag.color)}"></span>
+                          <strong>${escapeHtml(tag.name)}</strong>
+                          ${editable ? `
+                            <button class="tag-edit" type="button">Edit</button>
+                            <button class="tag-delete" type="button">Delete</button>
+                          ` : ''}
+                        </div>
+                      `,
+                    )
+                    .join('')
+                : '<p class="empty-note">No tags yet.</p>'
+            }
+          </div>
+        </details>
       `;
       els.tagList.append(group);
     });
@@ -754,62 +776,98 @@ function renderDayDetail(date) {
   els.calendarGrid.className = 'calendar-grid day-detail';
   els.calendarGrid.innerHTML = `
     <section class="day-detail-shell" data-date="${dateKey(selected)}">
-      <header class="day-detail-header">
-        <button class="ghost-action day-detail-back" type="button" data-day-detail-back>Back</button>
-        <div>
-          <p class="eyebrow">Selected day</p>
-          <h2>${selected.toLocaleDateString(undefined, {
-            weekday: 'long',
-            month: 'long',
-            day: 'numeric',
-          })}</h2>
-        </div>
-      </header>
+      <section class="day-detail-card">
+        <header class="day-detail-header">
+          <button class="day-detail-back" type="button" data-day-detail-back aria-label="Back to calendar">
+            <span aria-hidden="true">&lt;</span>
+          </button>
+          <div class="day-detail-title">
+            <p class="eyebrow">Selected day</p>
+            <h2>${selected.toLocaleDateString(undefined, {
+              weekday: 'long',
+              month: 'long',
+              day: 'numeric',
+            })}</h2>
+          </div>
+          <details class="day-detail-create">
+            <summary aria-label="Add to this day">
+              <span aria-hidden="true">+</span>
+            </summary>
+            <button
+              class="day-detail-create-backdrop"
+              type="button"
+              data-day-add-cancel
+              aria-label="Cancel add"
+            ></button>
+            <div class="day-detail-actions">
+              <label class="quick-add">
+                <span>Custom Quick Add</span>
+                <select data-day-quick-add-template>
+                  <option value="">No custom quick add</option>
+                  ${state.quickAddTemplates
+                    .map(
+                      (template) =>
+                        `<option value="${escapeHtml(template.id)}">${escapeHtml(template.shortcut)}</option>`,
+                    )
+                    .join('')}
+                </select>
+              </label>
+              <button class="primary-action day-detail-add" type="button" data-day-add aria-label="Add">
+                +
+              </button>
+            </div>
+          </details>
+        </header>
 
-      <form class="quick-add" data-quick-add-form>
-        <input
-          data-quick-add-input
-          type="text"
-          placeholder="Quick add: Dentist Friday 14:00"
-          autocomplete="off"
-        />
-        <button class="primary-action" type="submit">Add</button>
-      </form>
+        <section class="today-dashboard" aria-label="Day summary">
+          <div>
+            <strong>${otherEvents.length}</strong>
+            <span>events</span>
+          </div>
+          <div>
+            <strong>${tasks.length}</strong>
+            <span>tasks</span>
+          </div>
+          <div>
+            <strong>${upcoming.length}</strong>
+            <span>next</span>
+          </div>
+        </section>
 
-      <div class="day-detail-actions">
-        <button class="primary-action day-detail-add" type="button" data-day-add>Add</button>
-      </div>
-
-      <section class="today-dashboard">
-        <div>
-          <strong>${otherEvents.length}</strong>
-          <span>events</span>
-        </div>
-        <div>
-          <strong>${tasks.length}</strong>
-          <span>tasks</span>
-        </div>
-        <div>
-          <strong>${upcoming.length}</strong>
-          <span>next</span>
-        </div>
       </section>
 
-      <section class="day-detail-section">
-        <h3>Events</h3>
-        ${renderDayDetailList(otherEvents, 'No events for this day.')}
-      </section>
-
-      <section class="day-detail-section">
-        <h3>Tasks</h3>
-        ${renderDayDetailList(tasks, 'No tasks for this day.')}
-      </section>
-
-      <section class="day-detail-section">
-        <h3>Upcoming</h3>
-        ${renderDayDetailList(upcoming, 'Nothing else coming up.')}
-      </section>
+      ${renderDayDetailSection({
+        title: 'Events',
+        count: otherEvents.length,
+        events: otherEvents,
+        emptyText: 'No events for this day.',
+      })}
+      ${renderDayDetailSection({
+        title: 'Tasks',
+        count: tasks.length,
+        events: tasks,
+        emptyText: 'No tasks for this day.',
+      })}
+      ${renderDayDetailSection({
+        title: 'Upcoming',
+        count: upcoming.length,
+        events: upcoming,
+        emptyText: 'Nothing else coming up.',
+      })}
     </section>
+  `;
+}
+
+function renderDayDetailSection({ title, count, events, emptyText }) {
+  const hasEvents = events.length > 0;
+  return `
+    <details class="day-detail-section" ${hasEvents ? 'open' : ''}>
+      <summary>
+        <span>${title}</span>
+        <strong>${count}</strong>
+      </summary>
+      ${renderDayDetailList(events, emptyText)}
+    </details>
   `;
 }
 
