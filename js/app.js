@@ -26,11 +26,9 @@ import {
   updateTag,
 } from './api.js';
 import { addDays, addMonths, startOfDay, startOfMonthGrid, startOfWeek } from './dateUtils.js';
-import { parseQuickAddInput } from './quickAdd.js';
 import {
   canEditCalendar,
   defaultTagFor,
-  findQuickAddTemplateByShortcut,
   findTag,
   state,
   syncSelectedTags,
@@ -222,8 +220,14 @@ function bindUiEvents() {
 
   els.categoryFilters.addEventListener('change', (event) => {
     if (event.target.matches('input[type="checkbox"]')) {
-      if (event.target.checked) state.selectedTagIds.add(event.target.value);
-      else state.selectedTagIds.delete(event.target.value);
+      const visibleTagIds = [...els.categoryFilters.querySelectorAll('input[type="checkbox"]')]
+        .map((input) => input.value);
+      const wasOnlySelected =
+        state.selectedTagIds.size === 1 && state.selectedTagIds.has(event.target.value);
+
+      state.selectedTagIds = wasOnlySelected
+        ? new Set(visibleTagIds)
+        : new Set([event.target.value]);
       renderAll();
     }
   });
@@ -319,8 +323,14 @@ function bindUiEvents() {
       return;
     }
 
+    if (event.target.closest('[data-day-add-cancel]')) {
+      event.target.closest('.day-detail-create')?.removeAttribute('open');
+      return;
+    }
+
     if (event.target.closest('[data-day-add]')) {
-      openTypePicker(state.dayDetailDate || state.selectedDate);
+      event.target.closest('.day-detail-create')?.removeAttribute('open');
+      handleDayDetailAdd(event.target.closest('.day-detail-shell'));
       return;
     }
 
@@ -340,14 +350,6 @@ function bindUiEvents() {
 
     const dated = event.target.closest('[data-date]');
     if (dated) openDayDetail(new Date(`${dated.dataset.date}T00:00:00`));
-  });
-
-  els.calendarGrid.addEventListener('submit', (event) => {
-    const form = event.target.closest('[data-quick-add-form]');
-    if (!form) return;
-    event.preventDefault();
-    const input = form.querySelector('[data-quick-add-input]');
-    handleQuickAddSubmit(input);
   });
 
   els.calendarGrid.addEventListener('dragstart', (event) => {
@@ -999,32 +1001,29 @@ function buildQuickAddDraft(parsed, template, fallbackDate) {
   };
 }
 
-function handleQuickAddSubmit(input) {
-  const raw = (input.value || '').trim();
-  if (!raw) {
-    showToast('Type something to quick-add.');
-    input.focus();
+function handleDayDetailAdd(shell) {
+  const templateId = shell?.querySelector('[data-day-quick-add-template]')?.value || '';
+  if (!templateId) {
+    openTypePicker(state.dayDetailDate || state.selectedDate);
     return;
   }
 
-  // Match the first whitespace-delimited token against template shortcuts.
-  const tokens = raw.split(/\s+/);
-  const template = findQuickAddTemplateByShortcut(tokens[0]);
-  const remainder = template ? tokens.slice(1).join(' ') : raw;
-
-  // Reference date for "today/tomorrow/weekday" is always real-now; fallback
-  // for the "no date parsed" case is the day under view.
-  const parsed = parseQuickAddInput(remainder, new Date());
-  const hasAnything = template || parsed.ok;
-
-  if (!hasAnything) {
-    console.warn('[quick-add] Could not parse input', { raw, parsed, template });
-    showToast('Could not understand that quick-add. Try "Title tomorrow 9-17".');
+  const template = state.quickAddTemplates.find((item) => item.id === templateId);
+  if (!template) {
+    showToast('That quick-add is no longer available.');
+    renderCalendar();
     return;
   }
 
+  const parsed = {
+    ok: false,
+    title: '',
+    date: null,
+    startMinutes: null,
+    endMinutes: null,
+    durationMinutes: null,
+  };
   const draft = buildQuickAddDraft(parsed, template, state.dayDetailDate || state.selectedDate);
-  input.value = '';
   openEventModal(null, new Date(draft.starts_at), draft);
 }
 
