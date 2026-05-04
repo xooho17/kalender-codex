@@ -2,6 +2,8 @@
 # from the SUPABASE_URL and SUPABASE_PUBLISHABLE_KEY repository secrets.
 # For local dev, copy js/config.example.js to js/config.js and fill in your own values.
 js/config.js
+.env
+.env.local
 
 # Local static-server logs (server.mjs)
 server.log
