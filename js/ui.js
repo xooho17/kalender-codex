@@ -29,6 +29,9 @@ import {
 } from './store.js';
 
 const els = {};
+const IS_IOS =
+  /iP(ad|hone|od)/.test(navigator.userAgent) ||
+  (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 
 export function bindElements() {
   [
@@ -744,6 +747,7 @@ export function openShareModal(calendarId) {
 
 export function closeModal(dialog) {
   if (!dialog) return;
+  const wasFallback = dialog.classList.contains('ios-dialog-fallback');
   if (dialog.open) {
     try {
       dialog.close();
@@ -751,6 +755,8 @@ export function closeModal(dialog) {
       dialog.removeAttribute('open');
     }
   }
+  dialog.classList.remove('ios-dialog-fallback');
+  if (wasFallback) syncModalFallbackBackdrop();
 }
 
 function closeOtherDialogs(dialog) {
@@ -759,12 +765,27 @@ function closeOtherDialogs(dialog) {
   });
 }
 
+function openModalFallback(dialog) {
+  dialog.classList.add('ios-dialog-fallback');
+  dialog.setAttribute('open', '');
+  syncModalFallbackBackdrop();
+}
+
+function syncModalFallbackBackdrop() {
+  const hasFallbackDialog = Boolean(document.querySelector('dialog.ios-dialog-fallback[open]'));
+  document.body.classList.toggle('modal-fallback-open', hasFallbackDialog);
+}
+
 function safeShowModal(dialog) {
   if (!dialog) return;
   closeOtherDialogs(dialog);
   closeModal(dialog);
+  if (IS_IOS) {
+    openModalFallback(dialog);
+    return;
+  }
   if (typeof dialog.showModal !== 'function') {
-    dialog.setAttribute('open', '');
+    openModalFallback(dialog);
     return;
   }
   try {
@@ -776,7 +797,7 @@ function safeShowModal(dialog) {
       dialog.showModal();
     } catch (retryError) {
       console.warn('[modal] showModal retry failed, using non-modal fallback', retryError);
-      dialog.setAttribute('open', '');
+      openModalFallback(dialog);
     }
   }
 }

@@ -461,6 +461,12 @@ function bindUiEvents() {
   els.closeModalButtons.forEach((button) => {
     button.addEventListener('click', () => closeModal(button.closest('dialog')));
   });
+  document.addEventListener('click', (event) => {
+    if (!document.body.classList.contains('modal-fallback-open')) return;
+    const openDialog = document.querySelector('dialog.ios-dialog-fallback[open]');
+    if (!openDialog || openDialog.contains(event.target)) return;
+    closeModal(openDialog);
+  });
 
   if ('Notification' in window && Notification.permission === 'default') {
     window.setTimeout(() => Notification.requestPermission(), 1200);
