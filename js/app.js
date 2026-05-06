@@ -13,8 +13,11 @@ import {
   fetchTags,
   getSession,
   onAuthStateChange,
+  pauseAutoRefresh,
   reassignEventsTag,
   removeChannel,
+  resetRealtime,
+  resumeAutoRefresh,
   saveEvent,
   setEventCompleted,
   shareCalendar,
@@ -523,13 +526,15 @@ async function refreshEventsAndRender() {
   const calendarIds = state.calendars
     .filter((calendar) => !calendar.archived_at || state.showArchivedCalendars)
     .map((calendar) => calendar.id);
+
+  renderAll();
+
   if (!calendarIds.length) {
     state.events = [];
     renderAll();
     return;
   }
 
-  renderAll();
   try {
     const events = await fetchEvents(calendarIds, rangeStart, rangeEnd);
     if (requestId !== refreshRequestId) return;
@@ -1154,7 +1159,19 @@ function bindSwipeNavigation() {
 
 function bindLifecycleEvents() {
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') recoverAfterResume();
+    if (document.visibilityState === 'visible') {
+      recoverAfterResume();
+      return;
+    }
+
+    pauseAutoRefresh();
+    if (state.realtimeChannel) {
+      const channel = state.realtimeChannel;
+      state.realtimeChannel = null;
+      void removeChannel(channel).catch((error) => {
+        console.warn('[realtime] removeChannel threw', error);
+      });
+    }
   });
   window.addEventListener('focus', recoverAfterResume);
   window.addEventListener('offline', () => showToast('Offline. Changes will need a connection.'));
@@ -1180,6 +1197,9 @@ async function recoverAfterResume() {
   const activeCalendarId = state.activeCalendarId;
 
   try {
+    resetRealtime();
+    resumeAutoRefresh();
+
     const session = await getSession();
     state.session = session;
     setAuthenticatedView(Boolean(session));

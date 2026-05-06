@@ -44,6 +44,53 @@ export function onAuthStateChange(callback) {
   return supabase.auth.onAuthStateChange(callback);
 }
 
+const SUPABASE_OP_TIMEOUT_MS = 10000;
+
+async function withTimeout(promise, label) {
+  let timeoutId;
+  const timeout = new Promise((_, reject) => {
+    timeoutId = setTimeout(
+      () =>
+        reject(
+          new Error(
+            `${label} timed out - check your connection, or sign out and back in to clear a stale session.`,
+          ),
+        ),
+      SUPABASE_OP_TIMEOUT_MS,
+    );
+  });
+
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+export function pauseAutoRefresh() {
+  try {
+    supabase.auth.stopAutoRefresh();
+  } catch (error) {
+    console.warn('[auth] stopAutoRefresh threw', error);
+  }
+}
+
+export function resumeAutoRefresh() {
+  try {
+    supabase.auth.startAutoRefresh();
+  } catch (error) {
+    console.warn('[auth] startAutoRefresh threw', error);
+  }
+}
+
+export function resetRealtime() {
+  try {
+    supabase.realtime.disconnect();
+  } catch (error) {
+    console.warn('[realtime] disconnect threw', error);
+  }
+}
+
 export async function fetchCalendars() {
   let { data, error } = await supabase
     .from('calendar_members')
@@ -308,38 +355,33 @@ export async function saveEvent(event) {
   };
 
   if (event.id) {
-    const { data, error } = await supabase
-      .from('events')
-      .update(payload)
-      .eq('id', event.id)
-      .select()
-      .single();
+    const { data, error } = await withTimeout(
+      supabase.from('events').update(payload).eq('id', event.id).select().single(),
+      'Save',
+    );
     if (error) throw error;
     return data;
   }
 
-  const { data, error } = await supabase
-    .from('events')
-    .insert(payload)
-    .select()
-    .single();
+  const { data, error } = await withTimeout(
+    supabase.from('events').insert(payload).select().single(),
+    'Save',
+  );
 
   if (error) throw error;
   return data;
 }
 
 export async function deleteEvent(id) {
-  const { error } = await supabase.from('events').delete().eq('id', id);
+  const { error } = await withTimeout(supabase.from('events').delete().eq('id', id), 'Delete');
   if (error) throw error;
 }
 
 export async function setEventCompleted(id, completed) {
-  const { data, error } = await supabase
-    .from('events')
-    .update({ completed })
-    .eq('id', id)
-    .select()
-    .single();
+  const { data, error } = await withTimeout(
+    supabase.from('events').update({ completed }).eq('id', id).select().single(),
+    'Update',
+  );
 
   if (error) throw error;
   return data;
