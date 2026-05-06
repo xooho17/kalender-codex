@@ -464,6 +464,8 @@ function bindUiEvents() {
   document.addEventListener('click', (event) => {
     if (!document.body.classList.contains('modal-fallback-open')) return;
     const openDialog = document.querySelector('dialog.ios-dialog-fallback[open]');
+    const openedAt = Number(openDialog?.dataset.openedAt || 0);
+    if (Date.now() - openedAt < 700) return;
     if (!openDialog || openDialog.contains(event.target)) return;
     closeModal(openDialog);
   });

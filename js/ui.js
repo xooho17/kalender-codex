@@ -756,6 +756,7 @@ export function closeModal(dialog) {
     }
   }
   dialog.classList.remove('ios-dialog-fallback');
+  delete dialog.dataset.openedAt;
   if (wasFallback) syncModalFallbackBackdrop();
 }
 
@@ -767,6 +768,7 @@ function closeOtherDialogs(dialog) {
 
 function openModalFallback(dialog) {
   dialog.classList.add('ios-dialog-fallback');
+  dialog.dataset.openedAt = String(Date.now());
   dialog.setAttribute('open', '');
   syncModalFallbackBackdrop();
 }
