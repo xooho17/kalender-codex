@@ -646,7 +646,7 @@ export function openTypePicker(date = null) {
 }
 
 export function closeTypePicker() {
-  if (els.typePickerModal?.open) els.typePickerModal.close();
+  closeModal(els.typePickerModal);
 }
 
 export function consumePendingTypePickerDate() {
@@ -722,7 +722,7 @@ export function openTagDeleteModal({ tag, affectedCount, targetTagName }) {
 }
 
 export function closeTagDeleteModal() {
-  if (els.tagDeleteModal.open) els.tagDeleteModal.close();
+  closeModal(els.tagDeleteModal);
 }
 
 export function setTagDeleteError(message) {
@@ -742,7 +742,7 @@ export function openShareModal(calendarId) {
   safeShowModal(els.shareModal);
 }
 
-function safeShowModal(dialog) {
+export function closeModal(dialog) {
   if (!dialog) return;
   if (dialog.open) {
     try {
@@ -751,6 +751,18 @@ function safeShowModal(dialog) {
       dialog.removeAttribute('open');
     }
   }
+}
+
+function closeOtherDialogs(dialog) {
+  document.querySelectorAll('dialog[open]').forEach((openDialog) => {
+    if (openDialog !== dialog) closeModal(openDialog);
+  });
+}
+
+function safeShowModal(dialog) {
+  if (!dialog) return;
+  closeOtherDialogs(dialog);
+  closeModal(dialog);
   if (typeof dialog.showModal !== 'function') {
     dialog.setAttribute('open', '');
     return;

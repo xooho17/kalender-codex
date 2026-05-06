@@ -45,6 +45,7 @@ import {
 import {
   bindElements,
   closeDayDetail,
+  closeModal,
   closeTagDeleteModal,
   closeTypePicker,
   consumePendingTypePickerDate,
@@ -458,7 +459,7 @@ function bindUiEvents() {
     });
   }
   els.closeModalButtons.forEach((button) => {
-    button.addEventListener('click', () => button.closest('dialog').close());
+    button.addEventListener('click', () => closeModal(button.closest('dialog')));
   });
 
   if ('Notification' in window && Notification.permission === 'default') {
@@ -525,16 +526,16 @@ async function refreshEventsAndRender() {
     .map((calendar) => calendar.id);
   if (!calendarIds.length) {
     state.events = [];
-    renderAll();
+    if (!hasOpenDialog()) renderAll();
     return;
   }
 
-  renderAll();
+  if (!hasOpenDialog()) renderAll();
   try {
     const events = await fetchEvents(calendarIds, rangeStart, rangeEnd);
     if (requestId !== refreshRequestId) return;
     state.events = events;
-    renderAll();
+    if (!hasOpenDialog()) renderAll();
     scheduleReminders();
   } catch (error) {
     showToast(error.message || 'Events could not be loaded.');
@@ -632,7 +633,7 @@ async function handleEventSubmit(event) {
       item.id === temporaryId || item.id === saved.id ? saved : item,
     );
     renderAll();
-    els.eventModal.close();
+    closeModal(els.eventModal);
     showToast('Event saved');
   } catch (error) {
     if (previousEvents) {
@@ -662,7 +663,7 @@ async function handleDeleteEvent() {
 
   eventDeleteInFlight = true;
   els.deleteEventBtn.disabled = true;
-  els.eventModal.close();
+  closeModal(els.eventModal);
 
   try {
     await withOptimisticUpdate({
@@ -691,7 +692,7 @@ async function handleCreateCalendar(event) {
       color: els.calendarColor.value,
     });
     state.activeCalendarId = calendar.id;
-    els.calendarModal.close();
+    closeModal(els.calendarModal);
     await loadWorkspace();
     showToast('Calendar created');
   } catch (error) {
@@ -723,7 +724,7 @@ async function handleSaveTag(event) {
         : [...state.tags, saved],
     );
     syncSelectedTags();
-    els.tagModal.close();
+    closeModal(els.tagModal);
     renderAll();
     showToast(tag.id ? 'Tag updated' : 'Tag created');
   } catch (error) {
@@ -790,7 +791,7 @@ async function handleConfirmDeleteTag(event) {
     const reassigned = await reassignEventsTag(tag.id, target.id);
     await deleteTag(tag.id);
 
-    if (els.tagModal.open) els.tagModal.close();
+    closeModal(els.tagModal);
     closeTagDeleteModal();
     state.tags = uniqueById(await fetchTags());
     syncSelectedTags();
@@ -823,7 +824,7 @@ async function handleSaveQuickAddTemplate(event) {
       state.quickAddTemplates = uniqueById([...state.quickAddTemplates, created]);
       showToast('Quick-add created');
     }
-    els.quickAddTemplateModal.close();
+    closeModal(els.quickAddTemplateModal);
     renderAll();
   } catch (error) {
     if (error.code === '23505' || /duplicate key/i.test(error.message || '')) {
@@ -847,7 +848,7 @@ async function handleDeleteQuickAddTemplate(templateId) {
   try {
     await deleteQuickAddTemplate(templateId);
     state.quickAddTemplates = state.quickAddTemplates.filter((item) => item.id !== templateId);
-    if (els.quickAddTemplateModal.open) els.quickAddTemplateModal.close();
+    closeModal(els.quickAddTemplateModal);
     renderAll();
     showToast('Quick-add deleted');
   } catch (error) {
@@ -868,7 +869,7 @@ async function handleShareCalendar(event) {
       email: els.shareUserId.value.trim(),
       role: els.shareRole.value,
     });
-    els.shareModal.close();
+    closeModal(els.shareModal);
     showToast('Calendar shared');
   } catch (error) {
     els.shareError.textContent = error.message;
@@ -1178,22 +1179,23 @@ async function recoverAfterResume() {
 
   const activePanel = document.querySelector('.app-panel.active')?.dataset.panel || 'calendar';
   const activeCalendarId = state.activeCalendarId;
+  const wasAuthenticated = Boolean(state.session);
 
   try {
     const session = await getSession();
-    state.session = session;
-    setAuthenticatedView(Boolean(session));
 
     if (!session) {
-      state.calendars = [];
-      state.events = [];
-      state.tags = [];
-      state.quickAddTemplates = [];
-      await removeChannel(state.realtimeChannel);
-      state.realtimeChannel = null;
+      if (wasAuthenticated) {
+        showToast('Sync paused. Reconnecting...');
+        return;
+      }
+      state.session = null;
+      setAuthenticatedView(false);
       return;
     }
 
+    state.session = session;
+    if (!wasAuthenticated) setAuthenticatedView(true);
     renderUser();
     const [calendars, tags, templates] = await Promise.all([
       loadCalendarsSafely(),
@@ -1208,14 +1210,19 @@ async function recoverAfterResume() {
       state.calendars[0]?.id ||
       null;
     syncSelectedTags();
-    setActivePanel(activePanel);
     await setupRealtime();
+    if (hasOpenDialog()) return;
+    setActivePanel(activePanel);
     await refreshEventsAndRender();
   } catch (error) {
     showToast(error.message || 'Sync could not be restored.');
   } finally {
     resumeInFlight = false;
   }
+}
+
+function hasOpenDialog() {
+  return Boolean(document.querySelector('dialog[open]'));
 }
 
 function setFormBusy(form, isBusy) {
