@@ -133,7 +133,11 @@ export function setAuthenticatedView(isAuthenticated) {
   els.loginView.classList.toggle('hidden', isAuthenticated);
   els.calendarView.classList.toggle('hidden', !isAuthenticated);
   document.body.classList.toggle('authenticated', isAuthenticated);
-  window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+  try {
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+  } catch {
+    window.scrollTo(0, 0);
+  }
 }
 
 export function setActivePanel(panelName) {
@@ -374,7 +378,7 @@ export function openQuickAddTemplateModal(template = null) {
 
   els.deleteQuickAddTemplateBtn.hidden = !template;
   els.quickAddTemplateError.textContent = '';
-  els.quickAddTemplateModal.showModal();
+  safeShowModal(els.quickAddTemplateModal);
 }
 
 export function populateQuickAddTemplateTagOptions(calendarId, selectedTagId = '') {
@@ -580,7 +584,7 @@ export function openEventModal(event = null, date = null, draft = {}) {
   }
   els.deleteEventBtn.hidden = !event;
   els.eventError.textContent = '';
-  els.eventModal.showModal();
+  safeShowModal(els.eventModal);
 }
 
 export function readEventForm() {
@@ -638,7 +642,7 @@ export function openTypePicker(date = null) {
     openEventModal(null, pendingTypePickerDate);
     return;
   }
-  els.typePickerModal.showModal();
+  safeShowModal(els.typePickerModal);
 }
 
 export function closeTypePicker() {
@@ -655,7 +659,7 @@ export function openCalendarModal() {
   els.calendarName.value = '';
   els.calendarColor.value = '#92c5fc';
   els.calendarError.textContent = '';
-  els.calendarModal.showModal();
+  safeShowModal(els.calendarModal);
 }
 
 // New tag → calendar dropdown listed only with calendars the user can edit.
@@ -686,7 +690,7 @@ export function openTagModal(tag = null, presetCalendarId = null) {
   els.tagColor.value = tag?.color || '#92c5fc';
   els.deleteTagBtn.hidden = !tag;
   els.tagError.textContent = '';
-  els.tagModal.showModal();
+  safeShowModal(els.tagModal);
 }
 
 export function readTagForm() {
@@ -714,7 +718,7 @@ export function openTagDeleteModal({ tag, affectedCount, targetTagName }) {
     els.tagDeleteSummary.textContent = 'This tag is not in use.';
   }
   els.tagDeleteError.textContent = '';
-  els.tagDeleteModal.showModal();
+  safeShowModal(els.tagDeleteModal);
 }
 
 export function closeTagDeleteModal() {
@@ -735,7 +739,34 @@ export function openShareModal(calendarId) {
   els.shareUserId.placeholder = 'person@example.com';
   els.shareRole.value = 'collaborator';
   els.shareError.textContent = '';
-  els.shareModal.showModal();
+  safeShowModal(els.shareModal);
+}
+
+function safeShowModal(dialog) {
+  if (!dialog) return;
+  if (dialog.open) {
+    try {
+      dialog.close();
+    } catch {
+      dialog.removeAttribute('open');
+    }
+  }
+  if (typeof dialog.showModal !== 'function') {
+    dialog.setAttribute('open', '');
+    return;
+  }
+  try {
+    dialog.showModal();
+  } catch (error) {
+    console.warn('[modal] showModal failed, retrying once', error);
+    try {
+      dialog.removeAttribute('open');
+      dialog.showModal();
+    } catch (retryError) {
+      console.warn('[modal] showModal retry failed, using non-modal fallback', retryError);
+      dialog.setAttribute('open', '');
+    }
+  }
 }
 
 export function showToast(message) {
