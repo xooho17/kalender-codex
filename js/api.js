@@ -56,9 +56,14 @@ export async function fetchCalendars() {
   }
 
   if (error) throw error;
-  return data
+  const byId = new Map();
+  data
     .map((row) => ({ archived_at: null, ...row.calendars, role: row.role }))
-    .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+    .forEach((calendar) => {
+      if (!calendar?.id || byId.has(calendar.id)) return;
+      byId.set(calendar.id, calendar);
+    });
+  return [...byId.values()].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
 }
 
 export async function createCalendar({ name, color }) {
@@ -101,7 +106,7 @@ export async function fetchTags() {
     .order('created_at', { ascending: true });
 
   if (error) throw error;
-  return data;
+  return uniqueRowsById(data || []);
 }
 
 export async function createTag({ calendar_id, name, color }) {
@@ -178,26 +183,41 @@ export async function fetchQuickAddTemplates() {
     }
     throw error;
   }
-  return { rows: data, missingTable: false };
+  return { rows: uniqueRowsById(data || []), missingTable: false };
 }
 
 export async function createQuickAddTemplate(payload) {
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from('quick_add_templates')
     .insert(payload)
     .select()
     .single();
+  if (isMissingQuickAddStartColumn(error)) {
+    ({ data, error } = await supabase
+      .from('quick_add_templates')
+      .insert(withoutQuickAddStartTime(payload))
+      .select()
+      .single());
+  }
   if (error) throw error;
   return data;
 }
 
 export async function updateQuickAddTemplate(id, payload) {
-  const { data, error } = await supabase
+  let { data, error } = await supabase
     .from('quick_add_templates')
     .update(payload)
     .eq('id', id)
     .select()
     .single();
+  if (isMissingQuickAddStartColumn(error)) {
+    ({ data, error } = await supabase
+      .from('quick_add_templates')
+      .update(withoutQuickAddStartTime(payload))
+      .eq('id', id)
+      .select()
+      .single());
+  }
   if (error) throw error;
   return data;
 }
@@ -231,7 +251,47 @@ export async function fetchEvents(calendarIds, rangeStart, rangeEnd) {
     .order('starts_at', { ascending: true });
 
   if (error) throw error;
-  return data;
+  return withCreatorProfiles(uniqueRowsById(data || []));
+}
+
+async function withCreatorProfiles(events) {
+  const eventIds = events.map((event) => event.id).filter(Boolean);
+  if (!eventIds.length) return events;
+
+  try {
+    const { data, error } = await supabase.rpc('event_creator_profiles', {
+      target_event_ids: eventIds,
+    });
+    if (error) throw error;
+    const emailById = new Map((data || []).map((profile) => [profile.id, profile.email]));
+    return events.map((event) => ({
+      ...event,
+      creator_email: event.created_by ? emailById.get(event.created_by) || null : null,
+    }));
+  } catch (error) {
+    if (!/event_creator_profiles|function/i.test(error.message || '')) {
+      console.warn('[events] creator profile lookup failed', error);
+    }
+    return events;
+  }
+}
+
+function uniqueRowsById(rows) {
+  const byId = new Map();
+  rows.forEach((row) => {
+    if (!row?.id || byId.has(row.id)) return;
+    byId.set(row.id, row);
+  });
+  return [...byId.values()];
+}
+
+function isMissingQuickAddStartColumn(error) {
+  return Boolean(error && /default_start_time|column/i.test(error.message || ''));
+}
+
+function withoutQuickAddStartTime(payload) {
+  const { default_start_time, ...rest } = payload;
+  return rest;
 }
 
 export async function saveEvent(event) {

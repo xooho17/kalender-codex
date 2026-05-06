@@ -19,9 +19,12 @@ import {
   defaultTagFor,
   eventTag,
   findTag,
+  isTaskEvent,
   state,
   tagsForCalendar,
+  uniqueById,
   visibleEvents,
+  visibleMonthEvents,
   visibleTags,
 } from './store.js';
 
@@ -51,6 +54,7 @@ export function bindElements() {
     'prev-btn',
     'today-btn',
     'next-btn',
+    'month-entry-scope-btn',
     'period-title',
     'calendar-grid',
     'event-modal',
@@ -105,6 +109,7 @@ export function bindElements() {
     'quick-add-template-shortcut',
     'quick-add-template-title',
     'quick-add-template-duration',
+    'quick-add-template-start',
     'quick-add-template-tag',
     'quick-add-template-calendar',
     'quick-add-template-error',
@@ -163,8 +168,8 @@ export function renderCalendars() {
   els.calendarList.innerHTML = '';
   if (els.archivedToggle) els.archivedToggle.checked = state.showArchivedCalendars;
 
-  const calendars = state.calendars.filter(
-    (calendar) => state.showArchivedCalendars || !calendar.archived_at,
+  const calendars = uniqueById(
+    state.calendars.filter((calendar) => state.showArchivedCalendars || !calendar.archived_at),
   );
 
   if (!calendars.length) {
@@ -235,7 +240,7 @@ export function renderTags() {
     return;
   }
 
-  state.calendars
+  uniqueById(state.calendars)
     .filter((calendar) => !calendar.archived_at)
     .forEach((calendar) => {
       const calendarTags = tagsForCalendar(calendar.id);
@@ -309,6 +314,7 @@ export function renderQuickAddTemplates() {
       ? state.calendars.find((c) => c.id === template.default_calendar_id)
       : null;
     const meta = [
+      template.default_start_time ? template.default_start_time.slice(0, 5) : null,
       `${template.default_duration_minutes}m`,
       tag ? tag.name : null,
       calendar ? calendar.name : null,
@@ -342,6 +348,9 @@ export function openQuickAddTemplateModal(template = null) {
   els.quickAddTemplateShortcut.value = template?.shortcut || '';
   els.quickAddTemplateTitle.value = template?.default_title || '';
   els.quickAddTemplateDuration.value = template?.default_duration_minutes ?? 60;
+  if (els.quickAddTemplateStart) {
+    els.quickAddTemplateStart.value = template?.default_start_time?.slice(0, 5) || '';
+  }
 
   // Tag picker shows tags from the template's default_calendar_id, or every
   // visible tag if no calendar is chosen. Re-runs when default_calendar_id
@@ -353,7 +362,7 @@ export function openQuickAddTemplateModal(template = null) {
 
   els.quickAddTemplateCalendar.innerHTML =
     '<option value="">No default calendar</option>' +
-    state.calendars
+    uniqueById(state.calendars)
       .filter((c) => !c.archived_at)
       .map(
         (calendar) =>
@@ -369,7 +378,7 @@ export function openQuickAddTemplateModal(template = null) {
 }
 
 export function populateQuickAddTemplateTagOptions(calendarId, selectedTagId = '') {
-  const tags = calendarId ? tagsForCalendar(calendarId) : state.tags;
+  const tags = calendarId ? tagsForCalendar(calendarId) : uniqueById(state.tags);
   els.quickAddTemplateTag.innerHTML =
     '<option value="">No default tag</option>' +
     tags
@@ -401,6 +410,7 @@ export function readQuickAddTemplateForm() {
     shortcut,
     default_title: els.quickAddTemplateTitle.value.trim(),
     default_duration_minutes: Math.round(duration),
+    default_start_time: els.quickAddTemplateStart?.value || null,
     default_tag: els.quickAddTemplateTag.value || null,
     default_calendar_id: els.quickAddTemplateCalendar.value || null,
   };
@@ -410,6 +420,7 @@ export function renderCalendar() {
   els.viewTabs.forEach((tab) =>
     tab.classList.toggle('active', tab.dataset.view === state.view),
   );
+  renderMonthEntryScopeToggle();
 
   if (state.dayDetailDate) {
     renderDayDetail(state.dayDetailDate);
@@ -420,6 +431,14 @@ export function renderCalendar() {
   if (state.view === 'month') renderMonth();
   if (state.view === 'week') renderWeek();
   if (state.view === 'day') renderDay();
+}
+
+export function renderMonthEntryScopeToggle() {
+  if (!els.monthEntryScopeBtn) return;
+  const meta = monthEntryScopeMeta(state.monthEntryScope);
+  els.monthEntryScopeBtn.textContent = meta.label;
+  els.monthEntryScopeBtn.setAttribute('aria-label', meta.ariaLabel);
+  els.monthEntryScopeBtn.dataset.scope = state.monthEntryScope;
 }
 
 export function renderWeeklyOverview() {
@@ -438,14 +457,18 @@ export function renderWeeklyOverview() {
           .map(
             (event) => `
               <div class="overview-event ${event.completed ? 'completed' : ''}">
-                <span style="--event-color:${safeColor(eventColor(event))}"></span>
-                <button
-                  class="task-check"
-                  type="button"
-                  data-complete-event-id="${event.id}"
-                  aria-label="${event.completed ? 'Mark incomplete' : 'Mark complete'}"
-                  aria-pressed="${event.completed ? 'true' : 'false'}"
-                ></button>
+        <span style="--event-color:${safeColor(eventColor(event))}"></span>
+        ${
+          isTaskEvent(event)
+            ? `<button
+                class="task-check"
+                type="button"
+                data-complete-event-id="${event.id}"
+                aria-label="${event.completed ? 'Mark incomplete' : 'Mark complete'}"
+                aria-pressed="${event.completed ? 'true' : 'false'}"
+              ></button>`
+            : '<span class="task-check-placeholder" aria-hidden="true"></span>'
+        }
                 <button class="overview-main" type="button" data-event-id="${event.id}">
                   <strong>${escapeHtml(event.title)}</strong>
                   <small>${formatEventTime(event)}</small>
@@ -539,6 +562,7 @@ export function openEventModal(event = null, date = null, draft = {}) {
   els.eventDescription.value = event?.description || draft.description || '';
   els.eventStart.value = toLocalInputValue(start);
   els.eventEnd.value = toLocalInputValue(end);
+  els.eventForm.dataset.durationMinutes = String(Math.max(1, Math.round((end - start) / 60000)));
 
   // Pick the right tag id: the event's actual tag, the draft's tag (only if
   // it's valid for the event's calendar), or the calendar's default Untagged.
@@ -727,11 +751,15 @@ function renderMonth() {
   const today = new Date();
   const gridStart = startOfMonthGrid(state.selectedDate);
   const days = Array.from({ length: 42 }, (_, index) => addDays(gridStart, index));
+  const monthLayout = buildMonthEventLayout(days);
 
   els.calendarGrid.className = 'calendar-grid month-grid';
   els.calendarGrid.innerHTML = weekHeaderHtml();
   days.forEach((day) => {
-    const dayEvents = visibleEvents().filter((event) => eventOccursOn(event, day));
+    const dayEvents = visibleMonthEvents()
+      .filter((event) => eventOccursOn(event, day))
+      .map((event) => ({ event, lane: monthLayout.laneByEventId.get(event.id) ?? 99 }))
+      .sort((a, b) => a.lane - b.lane || new Date(a.event.starts_at) - new Date(b.event.starts_at));
     const cell = document.createElement('button');
     cell.type = 'button';
     cell.className = `month-cell${sameDay(day, today) ? ' today' : ''}${
@@ -741,29 +769,72 @@ function renderMonth() {
     cell.innerHTML = `
       <span class="day-number">${day.getDate()}</span>
       <span class="event-stack">
-        ${dayEvents
-          .slice(0, 3)
-          .map(
-            (event) => `
-              <span class="event-pill ${eventPillClass(event, day)}" draggable="true" data-event-id="${event.id}" style="--event-color:${safeColor(eventColor(event))}">
-                ${escapeHtml(event.title)}
-              </span>
-            `,
-          )
-          .join('')}
-        ${dayEvents.length > 3 ? `<span class="more-pill">+${dayEvents.length - 3}</span>` : ''}
+        ${Array.from({ length: 3 }, (_, lane) => {
+          const entry = dayEvents.find((item) => item.lane === lane);
+          if (!entry) return '<span class="event-lane-spacer" aria-hidden="true"></span>';
+          const event = entry.event;
+          return `
+            <span class="event-pill ${eventPillClass(event, day)}" draggable="true" data-event-id="${event.id}" style="--event-color:${safeColor(eventColor(event))}">
+              ${escapeHtml(event.title)}
+            </span>
+          `;
+        }).join('')}
+        ${dayEvents.filter((item) => item.lane >= 3).length ? `<span class="more-pill">+${dayEvents.filter((item) => item.lane >= 3).length}</span>` : ''}
       </span>
     `;
     els.calendarGrid.append(cell);
   });
 }
 
+function buildMonthEventLayout(days) {
+  const visible = visibleMonthEvents()
+    .map((event) => {
+      const indexes = days
+        .map((day, index) => (eventOccursOn(event, day) ? index : -1))
+        .filter((index) => index !== -1);
+      return {
+        event,
+        startIndex: indexes[0],
+        endIndex: indexes[indexes.length - 1],
+      };
+    })
+    .filter((item) => item.startIndex != null)
+    .sort(
+      (a, b) =>
+        a.startIndex - b.startIndex ||
+        new Date(a.event.starts_at) - new Date(b.event.starts_at) ||
+        b.endIndex - b.startIndex - (a.endIndex - a.startIndex) ||
+        a.event.title.localeCompare(b.event.title),
+    );
+
+  const laneEnds = [];
+  const laneByEventId = new Map();
+  visible.forEach(({ event, startIndex, endIndex }) => {
+    let lane = laneEnds.findIndex((lastEnd) => lastEnd < startIndex);
+    if (lane === -1) lane = laneEnds.length;
+    laneEnds[lane] = endIndex;
+    laneByEventId.set(event.id, lane);
+  });
+
+  return { laneByEventId };
+}
+
+function monthEntryScopeMeta(scope) {
+  if (scope === 'mine') {
+    return { label: 'Mine', ariaLabel: 'Show my entries in month view' };
+  }
+  if (scope === 'others') {
+    return { label: 'Others', ariaLabel: 'Show collaborator entries in month view' };
+  }
+  return { label: 'All', ariaLabel: 'Show all entries in month view' };
+}
+
 function renderDayDetail(date) {
   const selected = startOfDay(date);
   const dayEvents = visibleEvents().filter((event) => eventOccursOn(event, selected));
   const activeEvents = dayEvents.filter((event) => !event.completed);
-  const tasks = dayEvents.filter((event) => event.completed || event.title.toLowerCase().startsWith('task:'));
-  const otherEvents = activeEvents.filter((event) => !event.title.toLowerCase().startsWith('task:'));
+  const tasks = dayEvents.filter(isTaskEvent);
+  const otherEvents = activeEvents.filter((event) => !isTaskEvent(event));
   const upcoming = visibleEvents()
     .filter((event) => new Date(event.starts_at) > endOfDay(selected))
     .slice(0, 3);
@@ -881,7 +952,7 @@ function renderDayDetailList(events, emptyText) {
             <button class="day-detail-item ${event.completed ? 'completed' : ''}" type="button" data-event-id="${event.id}">
               <span style="--event-color:${safeColor(eventColor(event))}"></span>
               <strong>${escapeHtml(event.title)}</strong>
-              <small>${formatEventTime(event)} - ${escapeHtml(eventTagLabel(event))}</small>
+              <small>${formatEventTime(event)} - ${escapeHtml(eventTagLabel(event))}${eventCreatorLabel(event)}</small>
             </button>
           `,
         )
@@ -1025,6 +1096,13 @@ function eventColor(event) {
 
 function eventTagLabel(event) {
   return eventTag(event).name || FALLBACK_TAG_NAME;
+}
+
+function eventCreatorLabel(event) {
+  if (!event.created_by) return '';
+  if (event.created_by === state.session?.user?.id) return ' - by you';
+  if (event.creator_email) return ` - by ${escapeHtml(event.creator_email.split('@')[0])}`;
+  return ' - by collaborator';
 }
 
 function eventPillClass(event, day) {

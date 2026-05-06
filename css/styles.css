@@ -162,6 +162,14 @@ label {
   font-weight: 650;
 }
 
+.form-label {
+  display: grid;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-weight: 650;
+}
+
 input,
 select,
 textarea {
@@ -363,6 +371,39 @@ textarea:focus {
   background: var(--surface-2);
 }
 
+.view-controls {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 260px);
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+}
+
+.month-scope-toggle {
+  position: absolute;
+  right: 0;
+  min-width: 58px;
+  min-height: 34px;
+  border: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--primary) 16%, var(--surface-2));
+  color: var(--ink);
+  padding: 0 10px;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.month-scope-toggle[data-scope="mine"] {
+  background: color-mix(in srgb, var(--primary) 28%, var(--surface));
+  color: #09213e;
+}
+
+.month-scope-toggle[data-scope="others"] {
+  background: color-mix(in srgb, #22c55e 20%, var(--surface-2));
+}
+
 .view-tab {
   min-height: 32px;
   border: 0;
@@ -373,8 +414,13 @@ textarea:focus {
 
 .view-tab.active {
   background: var(--surface);
-  color: #09213e;
+  color: var(--ink);
   box-shadow: 0 3px 14px rgba(31, 53, 78, 0.08);
+}
+
+:root[data-theme="dark"] .view-tab.active {
+  background: color-mix(in srgb, var(--surface) 78%, white 10%);
+  color: var(--primary);
 }
 
 .date-controls {
@@ -430,6 +476,7 @@ textarea:focus {
 }
 
 .month-cell {
+  --cell-x: 3px;
   display: grid;
   min-width: 0;
   min-height: 0;
@@ -439,9 +486,10 @@ textarea:focus {
   border-radius: 14px;
   background: transparent;
   color: var(--ink);
-  padding: 5px 3px 4px;
+  padding: 5px var(--cell-x) 4px;
   text-align: center;
   touch-action: manipulation;
+  overflow: visible;
 }
 
 .month-cell:nth-child(7n) {
@@ -479,11 +527,18 @@ textarea:focus {
   display: grid;
   min-width: 0;
   gap: 2px;
-  overflow: hidden;
+  overflow: visible;
+}
+
+.event-lane-spacer {
+  display: block;
+  height: 15px;
 }
 
 .event-pill {
   display: block;
+  position: relative;
+  z-index: 1;
   min-width: 0;
   height: 15px;
   overflow: hidden;
@@ -499,15 +554,17 @@ textarea:focus {
 }
 
 .event-pill.continues-left {
-  border-top-left-radius: 2px;
-  border-bottom-left-radius: 2px;
-  margin-left: -3px;
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  margin-left: calc(var(--cell-x) * -1);
+  padding-left: var(--cell-x);
 }
 
 .event-pill.continues-right {
-  border-top-right-radius: 2px;
-  border-bottom-right-radius: 2px;
-  margin-right: -3px;
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+  margin-right: calc(var(--cell-x) * -1);
+  padding-right: var(--cell-x);
 }
 
 .event-pill.completed {
@@ -1017,6 +1074,71 @@ textarea:focus {
   line-height: 1.35;
 }
 
+.settings-accordion {
+  min-width: 0;
+}
+
+.settings-accordion-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  border-radius: 12px;
+  background: var(--surface);
+  padding: 8px 10px;
+  color: var(--muted);
+  cursor: pointer;
+  list-style: none;
+}
+
+.settings-accordion-summary::-webkit-details-marker {
+  display: none;
+}
+
+.settings-accordion-summary::after {
+  content: "";
+  width: 9px;
+  height: 9px;
+  border-right: 2px solid var(--muted);
+  border-bottom: 2px solid var(--muted);
+  transform: rotate(45deg) translateY(-2px);
+  transition: transform 150ms ease;
+}
+
+.settings-accordion[open] .settings-accordion-summary::after {
+  transform: rotate(225deg) translate(-2px, -1px);
+}
+
+.settings-accordion-title {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.settings-accordion-title strong {
+  color: var(--ink);
+  overflow: hidden;
+  font-size: 0.9rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-accordion-title small {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.settings-accordion-menu {
+  display: grid;
+  gap: 8px;
+  margin-top: 6px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--surface) 80%, transparent);
+  padding: 8px;
+}
+
 .quick-add-template-list {
   display: grid;
   gap: 8px;
@@ -1090,6 +1212,39 @@ textarea:focus {
 
 .quick-add-template-modal[open] {
   width: min(94vw, 460px);
+}
+
+.quick-add-template-options {
+  display: grid;
+  gap: 8px;
+  border-radius: 12px;
+  background: var(--surface-2);
+  padding: 4px 10px 10px;
+}
+
+.quick-add-template-options summary {
+  min-height: 36px;
+  padding: 8px 0 2px;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 0.84rem;
+  font-weight: 750;
+  list-style: none;
+}
+
+.quick-add-template-options summary::-webkit-details-marker {
+  display: none;
+}
+
+.quick-add-template-options summary::after {
+  content: "+";
+  float: right;
+  color: var(--primary-strong);
+  font-weight: 800;
+}
+
+.quick-add-template-options[open] summary::after {
+  content: "-";
 }
 
 .tag-picker {
@@ -1173,6 +1328,11 @@ textarea:focus {
   border: 0;
   border-radius: 999px;
   background: transparent;
+}
+
+.task-check-placeholder {
+  width: 44px;
+  height: 44px;
 }
 
 .task-check::before {
@@ -1835,6 +1995,7 @@ textarea:focus {
   }
 
   .month-cell {
+    --cell-x: 6px;
     padding: 8px 6px;
     text-align: center;
   }
@@ -1853,6 +2014,10 @@ textarea:focus {
     padding: 2px 6px;
     font-size: 0.68rem;
     line-height: 14px;
+  }
+
+  .event-lane-spacer {
+    height: 18px;
   }
 
   .time-grid {
@@ -1900,6 +2065,11 @@ textarea:focus {
 
   .view-switcher {
     width: 310px;
+  }
+
+  .view-controls {
+    grid-template-columns: 310px;
+    min-width: 420px;
   }
 
   .date-controls {

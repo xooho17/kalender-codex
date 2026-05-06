@@ -13,6 +13,7 @@ import {
   syncSelectedTags,
   tagsForCalendar,
   visibleEvents,
+  visibleMonthEvents,
   visibleTags,
 } from '../js/store.js';
 
@@ -31,7 +32,9 @@ beforeEach(() => {
   state.calendars = [calA, calB, calC, calArch];
   state.tags = [tagA1, tagA2, tagB1, tagB2, tagC1];
   state.events = [];
+  state.session = { user: { id: 'user-me', email: 'me@example.com' } };
   state.activeCalendarId = null;
+  state.monthEntryScope = 'all';
   state.search = '';
   state.showArchivedCalendars = false;
   state.selectedTagIds = new Set();
@@ -182,4 +185,35 @@ test('findQuickAddTemplateByShortcut — case-insensitive', () => {
   assert.equal(findQuickAddTemplateByShortcut('Work')?.id, 'q1');
   assert.equal(findQuickAddTemplateByShortcut('gym'), null);
   assert.equal(findQuickAddTemplateByShortcut(''), null);
+});
+
+test('visibleMonthEvents - all scope is the default', () => {
+  state.events = [
+    { id: 'e1', calendar_id: 'cal-a', title: 'Mine', description: '', tag_id: tagA1.id, created_by: 'user-me' },
+    { id: 'e2', calendar_id: 'cal-a', title: 'Other', description: '', tag_id: tagA1.id, created_by: 'user-other' },
+  ];
+  syncSelectedTags();
+  assert.deepEqual(visibleMonthEvents().map((e) => e.id), ['e1', 'e2']);
+});
+
+test('visibleMonthEvents - mine scope only shows entries created by the signed-in user', () => {
+  state.events = [
+    { id: 'e1', calendar_id: 'cal-a', title: 'Mine', description: '', tag_id: tagA1.id, created_by: 'user-me' },
+    { id: 'e2', calendar_id: 'cal-a', title: 'Other', description: '', tag_id: tagA1.id, created_by: 'user-other' },
+    { id: 'e3', calendar_id: 'cal-a', title: 'Unknown', description: '', tag_id: tagA1.id, created_by: null },
+  ];
+  state.monthEntryScope = 'mine';
+  syncSelectedTags();
+  assert.deepEqual(visibleMonthEvents().map((e) => e.id), ['e1']);
+});
+
+test('visibleMonthEvents - others scope only shows collaborator entries with a known creator', () => {
+  state.events = [
+    { id: 'e1', calendar_id: 'cal-a', title: 'Mine', description: '', tag_id: tagA1.id, created_by: 'user-me' },
+    { id: 'e2', calendar_id: 'cal-a', title: 'Other', description: '', tag_id: tagA1.id, created_by: 'user-other' },
+    { id: 'e3', calendar_id: 'cal-a', title: 'Unknown', description: '', tag_id: tagA1.id, created_by: null },
+  ];
+  state.monthEntryScope = 'others';
+  syncSelectedTags();
+  assert.deepEqual(visibleMonthEvents().map((e) => e.id), ['e2']);
 });

@@ -77,6 +77,7 @@ create table public.quick_add_templates (
   default_title text not null default '' check (char_length(default_title) <= 120),
   default_duration_minutes integer not null default 60
     check (default_duration_minutes between 1 and 1440),
+  default_start_time time,
   default_tag text,
   default_calendar_id uuid references public.calendars(id) on delete set null,
   created_at timestamptz not null default now(),
@@ -196,6 +197,23 @@ begin
   return new;
 end;
 $$;
+
+create or replace function public.event_creator_profiles(target_event_ids uuid[])
+returns table(id uuid, email text)
+language sql
+security definer
+set search_path = public
+stable
+as $$
+  select distinct p.id, p.email
+  from public.events e
+  join public.profiles p on p.id = e.created_by
+  where e.id = any(target_event_ids)
+    and public.is_calendar_member(e.calendar_id);
+$$;
+
+revoke all on function public.event_creator_profiles(uuid[]) from public;
+grant execute on function public.event_creator_profiles(uuid[]) to authenticated;
 
 create or replace function public.add_calendar_owner_member()
 returns trigger

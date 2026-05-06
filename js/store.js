@@ -10,6 +10,7 @@ export const state = {
   selectedDate: new Date(),
   dayDetailDate: null,
   view: 'month',
+  monthEntryScope: 'all',
   search: '',
   showArchivedCalendars: false,
   selectedTagIds: new Set(),
@@ -29,12 +30,21 @@ export function canEditCalendar(calendarId) {
   return calendar && ['owner', 'collaborator'].includes(calendar.role);
 }
 
+export function uniqueById(items) {
+  const seen = new Set();
+  return items.filter((item) => {
+    if (!item?.id || seen.has(item.id)) return false;
+    seen.add(item.id);
+    return true;
+  });
+}
+
 // Tags loaded for the user across every calendar they're a member of. Pickers
 // must consume tagsForCalendar(calendarId) — never the full list — so an event
 // in calendar A can never be saved with a tag from calendar B.
 export function tagsForCalendar(calendarId) {
   if (!calendarId) return [];
-  return state.tags.filter((tag) => tag.calendar_id === calendarId);
+  return uniqueById(state.tags.filter((tag) => tag.calendar_id === calendarId));
 }
 
 // Find a tag by id across every loaded calendar. Used for rendering existing
@@ -69,9 +79,24 @@ export function visibleTags() {
       .map((calendar) => calendar.id),
   );
   if (state.activeCalendarId) {
-    return state.tags.filter((tag) => tag.calendar_id === state.activeCalendarId);
+    return tagsForCalendar(state.activeCalendarId);
   }
-  return state.tags.filter((tag) => visibleCalendarIds.has(tag.calendar_id));
+  return uniqueById(state.tags.filter((tag) => visibleCalendarIds.has(tag.calendar_id)));
+}
+
+export function isTaskEvent(event) {
+  return Boolean(event?.completed || event?.title?.toLowerCase().startsWith('task:'));
+}
+
+export function visibleMonthEvents() {
+  const userId = state.session?.user?.id;
+  if (state.monthEntryScope === 'mine') {
+    return visibleEvents().filter((event) => userId && event.created_by === userId);
+  }
+  if (state.monthEntryScope === 'others') {
+    return visibleEvents().filter((event) => userId && event.created_by && event.created_by !== userId);
+  }
+  return visibleEvents();
 }
 
 // Re-sync selectedTagIds with whatever tags are currently visible. Called any

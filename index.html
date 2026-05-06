@@ -65,10 +65,20 @@
                   <span id="user-email"></span>
                 </div>
               </div>
-              <div class="view-switcher" role="tablist" aria-label="Calendar view">
-                <button class="view-tab active" data-view="month" type="button">Month</button>
-                <button class="view-tab" data-view="week" type="button">Week</button>
-                <button class="view-tab" data-view="day" type="button">Day</button>
+              <div class="view-controls">
+                <div class="view-switcher" role="tablist" aria-label="Calendar view">
+                  <button class="view-tab active" data-view="month" type="button">Month</button>
+                  <button class="view-tab" data-view="week" type="button">Week</button>
+                  <button class="view-tab" data-view="day" type="button">Day</button>
+                </div>
+                <button
+                  id="month-entry-scope-btn"
+                  class="month-scope-toggle"
+                  type="button"
+                  aria-label="Show all entries in month view"
+                >
+                  All
+                </button>
               </div>
             </header>
 
@@ -132,21 +142,28 @@
               <div id="tag-list" class="tag-list"></div>
             </section>
             <section class="side-section quick-add-templates-section">
-              <div class="section-heading">
-                <h2>Custom Quick Adds</h2>
-                <button
-                  id="new-quick-add-template-btn"
-                  class="icon-button"
-                  type="button"
-                  title="Create quick-add template"
-                >
-                  +
-                </button>
-              </div>
-              <p class="settings-helper">
-                Choose these defaults from the day detail quick-add menu.
-              </p>
-              <div id="quick-add-template-list" class="quick-add-template-list"></div>
+              <details class="settings-accordion" open>
+                <summary class="settings-accordion-summary">
+                  <span class="settings-accordion-title">
+                    <strong>Custom Quick Adds</strong>
+                    <small>Template shortcuts</small>
+                  </span>
+                  <button
+                    id="new-quick-add-template-btn"
+                    class="icon-button"
+                    type="button"
+                    title="Create quick-add template"
+                  >
+                    +
+                  </button>
+                </summary>
+                <div class="settings-accordion-menu">
+                  <p class="settings-helper">
+                    Choose these defaults from the day detail quick-add menu.
+                  </p>
+                  <div id="quick-add-template-list" class="quick-add-template-list"></div>
+                </div>
+              </details>
             </section>
             <div class="settings-actions">
               <button id="theme-toggle" class="ghost-action" type="button">Dark mode</button>
@@ -199,10 +216,10 @@
           </label>
         </div>
 
-        <label class="tag-picker-label">
-          Tag
+        <div class="tag-picker-label form-label">
+          <span>Tag</span>
           <span id="event-tag-options" class="tag-picker"></span>
-        </label>
+        </div>
 
         <details class="event-options">
           <summary>More options</summary>
@@ -375,6 +392,13 @@
             required
           />
         </label>
+        <details class="quick-add-template-options">
+          <summary>Time default</summary>
+          <label>
+            Start time
+            <input id="quick-add-template-start" type="time" />
+          </label>
+        </details>
         <label>
           Default tag
           <select id="quick-add-template-tag">

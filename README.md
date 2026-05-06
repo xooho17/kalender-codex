@@ -122,7 +122,8 @@ must be configured with **Source: GitHub Actions** under **Settings → Pages**.
 5. For an existing project that pre-dates the tag/archive features, also run
    `supabase/feature_updates.sql`. If calendar inserts fail with an RLS error,
    run `supabase/rls_fix_calendars.sql`. For Custom Quick Add templates, also
-   run `supabase/2026-05-add-quick-add-templates.sql`. For the move from
+   run `supabase/2026-05-add-quick-add-templates.sql`, then
+   `supabase/2026-05-quick-add-start-and-event-creators.sql`. For the move from
    user-owned tags to calendar-scoped tags, run
    `supabase/2026-05-calendar-scoped-tags.sql`. After verifying the new tag
    flow with two real users (see "Tags" below), apply

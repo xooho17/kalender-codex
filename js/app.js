@@ -25,13 +25,22 @@ import {
   updateQuickAddTemplate,
   updateTag,
 } from './api.js';
-import { addDays, addMonths, startOfDay, startOfMonthGrid, startOfWeek } from './dateUtils.js';
+import {
+  addDays,
+  addMonths,
+  fromLocalInputValue,
+  startOfDay,
+  startOfMonthGrid,
+  startOfWeek,
+  toLocalInputValue,
+} from './dateUtils.js';
 import {
   canEditCalendar,
   defaultTagFor,
   findTag,
   state,
   syncSelectedTags,
+  uniqueById,
 } from './store.js';
 import {
   bindElements,
@@ -54,6 +63,7 @@ import {
   readTagForm,
   renderAll,
   renderCalendars,
+  renderMonthEntryScopeToggle,
   renderUser,
   selectEventTag,
   setActivePanel,
@@ -128,11 +138,17 @@ async function boot() {
   setAuthenticatedView(Boolean(state.session));
   if (state.session) await loadWorkspace();
 
-  onAuthStateChange(async (_event, session) => {
+  onAuthStateChange(async (authEvent, session) => {
+    const wasAuthenticated = Boolean(state.session);
     state.session = session;
-    setAuthenticatedView(Boolean(session));
+    if (Boolean(session) !== wasAuthenticated) {
+      setAuthenticatedView(Boolean(session));
+    }
     if (session) {
-      await loadWorkspace();
+      renderUser();
+      if (authEvent === 'SIGNED_IN' || !state.calendars.length) {
+        await loadWorkspace();
+      }
     } else {
       state.calendars = [];
       state.events = [];
@@ -184,6 +200,15 @@ function bindUiEvents() {
       refreshEventsAndRender();
     });
   });
+  if (els.monthEntryScopeBtn) {
+    els.monthEntryScopeBtn.addEventListener('click', () => {
+      state.monthEntryScope = nextMonthEntryScope(state.monthEntryScope);
+      renderMonthEntryScopeToggle();
+      state.view = 'month';
+      state.dayDetailDate = null;
+      refreshEventsAndRender();
+    });
+  }
 
   els.bottomTabs.forEach((tab) => {
     tab.addEventListener('click', () => {
@@ -261,6 +286,10 @@ function bindUiEvents() {
     const fallback = defaultTagFor(calendarId);
     selectEventTag(fallback?.id || '');
   });
+  els.eventStart.addEventListener('change', syncEventEndFromStart);
+  els.eventStart.addEventListener('input', syncEventEndFromStart);
+  els.eventEnd.addEventListener('change', ensureEventEndAfterStart);
+  els.eventEnd.addEventListener('input', ensureEventEndAfterStart);
 
   els.calendarList.addEventListener('click', (event) => {
     const shareTarget = event.target.closest('.share-affordance');
@@ -392,7 +421,11 @@ function bindUiEvents() {
   els.shareForm.addEventListener('submit', handleShareCalendar);
 
   if (els.newQuickAddTemplateBtn) {
-    els.newQuickAddTemplateBtn.addEventListener('click', () => openQuickAddTemplateModal());
+    els.newQuickAddTemplateBtn.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      openQuickAddTemplateModal();
+    });
   }
   if (els.quickAddTemplateForm) {
     els.quickAddTemplateForm.addEventListener('submit', handleSaveQuickAddTemplate);
@@ -440,9 +473,9 @@ async function loadWorkspace() {
     loadTagsSafely(),
     loadQuickAddTemplatesSafely(),
   ]);
-  state.calendars = calendars;
-  state.tags = tags;
-  state.quickAddTemplates = templates;
+  state.calendars = uniqueById(calendars);
+  state.tags = uniqueById(tags);
+  state.quickAddTemplates = uniqueById(templates);
   state.activeCalendarId = state.calendars.find((calendar) => !calendar.archived_at)?.id || null;
   syncSelectedTags();
   setActivePanel('calendar');
@@ -496,6 +529,7 @@ async function refreshEventsAndRender() {
     return;
   }
 
+  renderAll();
   try {
     const events = await fetchEvents(calendarIds, rangeStart, rangeEnd);
     if (requestId !== refreshRequestId) return;
@@ -523,7 +557,7 @@ async function setupRealtime() {
     // event renders pick up the new color/name. Refetch tags then re-render.
     onTagChange: async () => {
       try {
-        state.tags = await fetchTags();
+        state.tags = uniqueById(await fetchTags());
         syncSelectedTags();
         renderAll();
       } catch (error) {
@@ -559,6 +593,12 @@ function movePeriod(direction) {
   refreshEventsAndRender();
 }
 
+function nextMonthEntryScope(scope) {
+  if (scope === 'all') return 'mine';
+  if (scope === 'mine') return 'others';
+  return 'all';
+}
+
 async function handleEventSubmit(event) {
   event.preventDefault();
   if (eventSaveInFlight) return;
@@ -576,6 +616,7 @@ async function handleEventSubmit(event) {
     const optimisticEvent = {
       ...payload,
       id: temporaryId,
+      created_by: state.session?.user?.id || null,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
@@ -676,9 +717,11 @@ async function handleSaveTag(event) {
     // Splice the saved row into state directly. Realtime would also echo it
     // back via onTagChange (which refetches), but rendering once with the
     // server's row keeps the modal-close flicker-free.
-    state.tags = tag.id
-      ? state.tags.map((item) => (item.id === saved.id ? saved : item))
-      : [...state.tags, saved];
+    state.tags = uniqueById(
+      tag.id
+        ? state.tags.map((item) => (item.id === saved.id ? saved : item))
+        : [...state.tags, saved],
+    );
     syncSelectedTags();
     els.tagModal.close();
     renderAll();
@@ -749,7 +792,7 @@ async function handleConfirmDeleteTag(event) {
 
     if (els.tagModal.open) els.tagModal.close();
     closeTagDeleteModal();
-    state.tags = await fetchTags();
+    state.tags = uniqueById(await fetchTags());
     syncSelectedTags();
     await refreshEventsAndRender();
     showToast(`Tag deleted${reassigned.length ? ` — ${reassigned.length} event${reassigned.length === 1 ? '' : 's'} reassigned to ${target.name}.` : '.'}`);
@@ -770,14 +813,14 @@ async function handleSaveQuickAddTemplate(event) {
     if (payload.id) {
       const { id, ...update } = payload;
       const saved = await updateQuickAddTemplate(id, update);
-      state.quickAddTemplates = state.quickAddTemplates.map((item) =>
-        item.id === saved.id ? saved : item,
+      state.quickAddTemplates = uniqueById(
+        state.quickAddTemplates.map((item) => (item.id === saved.id ? saved : item)),
       );
       showToast('Quick-add updated');
     } else {
       const { id, ...create } = payload;
       const created = await createQuickAddTemplate(create);
-      state.quickAddTemplates = [...state.quickAddTemplates, created];
+      state.quickAddTemplates = uniqueById([...state.quickAddTemplates, created]);
       showToast('Quick-add created');
     }
     els.quickAddTemplateModal.close();
@@ -946,6 +989,35 @@ async function handleEventDrop(event) {
   }
 }
 
+function syncEventEndFromStart() {
+  if (!els.eventStart.value) return;
+  const start = fromLocalInputValue(els.eventStart.value);
+  if (Number.isNaN(start.getTime())) return;
+
+  const durationMinutes = Number(els.eventForm.dataset.durationMinutes || 60);
+  const safeDurationMinutes =
+    Number.isFinite(durationMinutes) && durationMinutes > 0 ? durationMinutes : 60;
+  const nextEnd = new Date(start.getTime() + safeDurationMinutes * 60000);
+  els.eventEnd.value = toLocalInputValue(nextEnd);
+}
+
+function ensureEventEndAfterStart() {
+  if (!els.eventStart.value || !els.eventEnd.value) return;
+  const start = fromLocalInputValue(els.eventStart.value);
+  const end = fromLocalInputValue(els.eventEnd.value);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return;
+
+  if (end <= start) {
+    const durationMinutes = Number(els.eventForm.dataset.durationMinutes || 60);
+    const safeDurationMinutes =
+      Number.isFinite(durationMinutes) && durationMinutes > 0 ? durationMinutes : 60;
+    els.eventEnd.value = toLocalInputValue(new Date(start.getTime() + safeDurationMinutes * 60000));
+    return;
+  }
+
+  els.eventForm.dataset.durationMinutes = String(Math.max(1, Math.round((end - start) / 60000)));
+}
+
 function toggleTheme() {
   const next =
     document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
@@ -964,7 +1036,8 @@ function syncThemeButton() {
 // the caller can pass the draft straight to openEventModal.
 function buildQuickAddDraft(parsed, template, fallbackDate) {
   const baseDate = parsed.date || startOfDay(fallbackDate || new Date());
-  const startMinutes = parsed.startMinutes ?? 9 * 60;
+  const templateStartMinutes = parseClockMinutes(template?.default_start_time);
+  const startMinutes = parsed.startMinutes ?? templateStartMinutes ?? 9 * 60;
   const start = new Date(baseDate);
   start.setHours(0, 0, 0, 0);
   start.setMinutes(startMinutes);
@@ -1006,6 +1079,16 @@ function buildQuickAddDraft(parsed, template, fallbackDate) {
     tag_id: tagId,
     calendar_id: calendarId,
   };
+}
+
+function parseClockMinutes(value) {
+  if (!value) return null;
+  const match = String(value).match(/^(\d{1,2}):(\d{2})/);
+  if (!match) return null;
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+  if (hour < 0 || hour > 23 || minute < 0 || minute > 59) return null;
+  return hour * 60 + minute;
 }
 
 function handleDayDetailAdd(shell) {
@@ -1117,12 +1200,12 @@ async function recoverAfterResume() {
       loadTagsSafely(),
       loadQuickAddTemplatesSafely(),
     ]);
-    state.calendars = calendars;
-    state.tags = tags;
-    state.quickAddTemplates = templates;
+    state.calendars = uniqueById(calendars);
+    state.tags = uniqueById(tags);
+    state.quickAddTemplates = uniqueById(templates);
     state.activeCalendarId =
-      calendars.find((calendar) => calendar.id === activeCalendarId)?.id ||
-      calendars[0]?.id ||
+      state.calendars.find((calendar) => calendar.id === activeCalendarId)?.id ||
+      state.calendars[0]?.id ||
       null;
     syncSelectedTags();
     setActivePanel(activePanel);
