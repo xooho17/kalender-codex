@@ -410,10 +410,17 @@ export function readQuickAddTemplateForm() {
     shortcut,
     default_title: els.quickAddTemplateTitle.value.trim(),
     default_duration_minutes: Math.round(duration),
-    default_start_time: els.quickAddTemplateStart?.value || null,
+    default_start_time: normalizeTimeValue(els.quickAddTemplateStart?.value),
     default_tag: els.quickAddTemplateTag.value || null,
     default_calendar_id: els.quickAddTemplateCalendar.value || null,
   };
+}
+
+function normalizeTimeValue(value) {
+  if (!value) return null;
+  const match = String(value).match(/^(\d{2}):(\d{2})(?::\d{2})?$/);
+  if (!match) return null;
+  return `${match[1]}:${match[2]}:00`;
 }
 
 export function renderCalendar() {

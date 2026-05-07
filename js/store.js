@@ -10,7 +10,7 @@ export const state = {
   selectedDate: new Date(),
   dayDetailDate: null,
   view: 'month',
-  monthEntryScope: 'all',
+  monthEntryScope: 'mine',
   search: '',
   showArchivedCalendars: false,
   selectedTagIds: new Set(),

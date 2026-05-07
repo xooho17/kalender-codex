@@ -34,7 +34,7 @@ beforeEach(() => {
   state.events = [];
   state.session = { user: { id: 'user-me', email: 'me@example.com' } };
   state.activeCalendarId = null;
-  state.monthEntryScope = 'all';
+  state.monthEntryScope = 'mine';
   state.search = '';
   state.showArchivedCalendars = false;
   state.selectedTagIds = new Set();
@@ -187,11 +187,21 @@ test('findQuickAddTemplateByShortcut — case-insensitive', () => {
   assert.equal(findQuickAddTemplateByShortcut(''), null);
 });
 
-test('visibleMonthEvents - all scope is the default', () => {
+test('visibleMonthEvents - mine scope is the default', () => {
   state.events = [
     { id: 'e1', calendar_id: 'cal-a', title: 'Mine', description: '', tag_id: tagA1.id, created_by: 'user-me' },
     { id: 'e2', calendar_id: 'cal-a', title: 'Other', description: '', tag_id: tagA1.id, created_by: 'user-other' },
   ];
+  syncSelectedTags();
+  assert.deepEqual(visibleMonthEvents().map((e) => e.id), ['e1']);
+});
+
+test('visibleMonthEvents - all scope shows every collaborator entry', () => {
+  state.events = [
+    { id: 'e1', calendar_id: 'cal-a', title: 'Mine', description: '', tag_id: tagA1.id, created_by: 'user-me' },
+    { id: 'e2', calendar_id: 'cal-a', title: 'Other', description: '', tag_id: tagA1.id, created_by: 'user-other' },
+  ];
+  state.monthEntryScope = 'all';
   syncSelectedTags();
   assert.deepEqual(visibleMonthEvents().map((e) => e.id), ['e1', 'e2']);
 });

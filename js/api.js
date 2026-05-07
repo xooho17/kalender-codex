@@ -240,6 +240,7 @@ export async function createQuickAddTemplate(payload) {
     .select()
     .single();
   if (isMissingQuickAddStartColumn(error)) {
+    if (payload.default_start_time) throw missingQuickAddStartMigrationError();
     ({ data, error } = await supabase
       .from('quick_add_templates')
       .insert(withoutQuickAddStartTime(payload))
@@ -258,6 +259,7 @@ export async function updateQuickAddTemplate(id, payload) {
     .select()
     .single();
   if (isMissingQuickAddStartColumn(error)) {
+    if (payload.default_start_time) throw missingQuickAddStartMigrationError();
     ({ data, error } = await supabase
       .from('quick_add_templates')
       .update(withoutQuickAddStartTime(payload))
@@ -339,6 +341,12 @@ function isMissingQuickAddStartColumn(error) {
 function withoutQuickAddStartTime(payload) {
   const { default_start_time, ...rest } = payload;
   return rest;
+}
+
+function missingQuickAddStartMigrationError() {
+  return new Error(
+    'Run supabase/2026-05-quick-add-start-and-event-creators.sql to enable Custom Quick Add start times.',
+  );
 }
 
 export async function saveEvent(event) {

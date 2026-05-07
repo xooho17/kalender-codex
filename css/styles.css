@@ -1214,39 +1214,6 @@ textarea:focus {
   width: min(94vw, 460px);
 }
 
-.quick-add-template-options {
-  display: grid;
-  gap: 8px;
-  border-radius: 12px;
-  background: var(--surface-2);
-  padding: 4px 10px 10px;
-}
-
-.quick-add-template-options summary {
-  min-height: 36px;
-  padding: 8px 0 2px;
-  color: var(--muted);
-  cursor: pointer;
-  font-size: 0.84rem;
-  font-weight: 750;
-  list-style: none;
-}
-
-.quick-add-template-options summary::-webkit-details-marker {
-  display: none;
-}
-
-.quick-add-template-options summary::after {
-  content: "+";
-  float: right;
-  color: var(--primary-strong);
-  font-weight: 800;
-}
-
-.quick-add-template-options[open] summary::after {
-  content: "-";
-}
-
 .tag-picker {
   display: flex;
   gap: 8px;
