@@ -58,13 +58,7 @@
         <div class="app-panels">
           <section class="app-panel active" data-panel="calendar">
             <header class="topbar">
-              <div class="mobile-brand">
-                <div class="brand-mark">K</div>
-                <div>
-                  <strong>Kalender</strong>
-                  <span id="user-email"></span>
-                </div>
-              </div>
+              <span id="user-email" hidden></span>
               <div class="view-controls">
                 <div class="view-switcher" role="tablist" aria-label="Calendar view">
                   <button class="view-tab active" data-view="month" type="button">Month</button>
@@ -101,7 +95,13 @@
               <span>Search events</span>
               <input id="event-search" type="search" placeholder="Title or description" />
             </label>
-            <div id="category-filters" class="category-filters"></div>
+            <details id="tag-filter-panel" class="tag-filter-panel">
+              <summary>
+                <span>Tags</span>
+                <strong id="tag-filter-count">0</strong>
+              </summary>
+              <div id="category-filters" class="category-filters"></div>
+            </details>
             <section class="side-section overview-section">
               <div class="section-heading">
                 <h2 id="focus-overview-title">This week</h2>
@@ -150,7 +150,7 @@
               <div id="tag-list" class="tag-list"></div>
             </section>
             <section class="side-section quick-add-templates-section">
-              <details class="settings-accordion" open>
+              <details class="settings-accordion">
                 <summary class="settings-accordion-summary">
                   <span class="settings-accordion-title">
                     <strong>Custom Quick Adds</strong>

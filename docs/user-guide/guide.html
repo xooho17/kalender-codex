@@ -1,0 +1,478 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <title>Kalender Anleitung für neue Nutzer</title>
+    <style>
+      @page { size: A4; margin: 15mm; }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        color: #182231;
+        background: #ffffff;
+        font-family: Inter, Arial, sans-serif;
+        font-size: 11.5pt;
+        line-height: 1.45;
+      }
+      h1, h2, h3 { line-height: 1.12; margin: 0; }
+      h1 { font-size: 29pt; letter-spacing: 0; }
+      h2 { font-size: 18pt; margin-top: 8mm; }
+      h3 { font-size: 13pt; margin-top: 5mm; }
+      p { margin: 2.5mm 0; }
+      ul, ol { margin: 2.5mm 0 4mm 6mm; padding-left: 4mm; }
+      li { margin: 1.6mm 0; }
+      strong { font-weight: 800; }
+      .cover {
+        min-height: 246mm;
+        display: flex;
+        flex-direction: column;
+        justify-content: space-between;
+        page-break-after: always;
+      }
+      .brand {
+        display: inline-flex;
+        align-items: center;
+        gap: 9px;
+        color: #526174;
+        font-size: 10pt;
+        font-weight: 800;
+        text-transform: uppercase;
+      }
+      .mark {
+        width: 32px;
+        height: 32px;
+        border-radius: 9px;
+        display: grid;
+        place-items: center;
+        color: white;
+        background: #111827;
+      }
+      .subtitle {
+        max-width: 142mm;
+        margin-top: 6mm;
+        color: #526174;
+        font-size: 14pt;
+      }
+      .hero-shot {
+        width: 104mm;
+        border: 1px solid #dce4ee;
+        border-radius: 12px;
+        box-shadow: 0 18px 48px rgba(20, 35, 54, 0.18);
+      }
+      .hero-row {
+        display: flex;
+        align-items: flex-end;
+        gap: 14mm;
+      }
+      .toc {
+        border-top: 1px solid #dfe7f0;
+        padding-top: 6mm;
+        color: #526174;
+      }
+      .page {
+        page-break-after: always;
+      }
+      .page:last-child { page-break-after: auto; }
+      .split {
+        display: grid;
+        grid-template-columns: 76mm 1fr;
+        gap: 9mm;
+        align-items: start;
+      }
+      .shot {
+        width: 76mm;
+        border: 1px solid #dce4ee;
+        border-radius: 10px;
+        box-shadow: 0 10px 28px rgba(20, 35, 54, 0.12);
+      }
+      .annotated {
+        position: relative;
+        width: 76mm;
+      }
+      .annotated .shot { width: 100%; }
+      .pin {
+        position: absolute;
+        width: 7mm;
+        height: 7mm;
+        display: grid;
+        place-items: center;
+        border: 1.2mm solid #ffffff;
+        border-radius: 50%;
+        color: #ffffff;
+        background: #e11d48;
+        box-shadow: 0 4px 12px rgba(20, 35, 54, 0.28);
+        font-size: 9pt;
+        font-weight: 900;
+      }
+      .pin.blue { background: #2563eb; }
+      .pin.green { background: #15803d; }
+      .pin.amber { background: #d97706; }
+      .legend {
+        margin: 3mm 0 0;
+        padding: 3mm;
+        border: 1px solid #dce4ee;
+        border-radius: 8px;
+        background: #fbfcfe;
+        font-size: 9.5pt;
+      }
+      .legend p { margin: 1.3mm 0; }
+      .legend b {
+        display: inline-grid;
+        width: 5.5mm;
+        height: 5.5mm;
+        margin-right: 1.5mm;
+        place-items: center;
+        border-radius: 50%;
+        color: #ffffff;
+        background: #e11d48;
+        font-size: 8pt;
+      }
+      .legend b.blue { background: #2563eb; }
+      .legend b.green { background: #15803d; }
+      .legend b.amber { background: #d97706; }
+      .callout {
+        margin: 4mm 0;
+        padding: 4mm;
+        border-left: 3px solid #2563eb;
+        background: #f3f7ff;
+        border-radius: 7px;
+      }
+      .steps {
+        counter-reset: step;
+        list-style: none;
+        padding: 0;
+        margin-left: 0;
+      }
+      .steps li {
+        counter-increment: step;
+        display: grid;
+        grid-template-columns: 8mm 1fr;
+        gap: 3mm;
+        margin: 3mm 0;
+      }
+      .steps li::before {
+        content: counter(step);
+        width: 7mm;
+        height: 7mm;
+        border-radius: 50%;
+        display: grid;
+        place-items: center;
+        color: white;
+        background: #111827;
+        font-size: 9pt;
+        font-weight: 800;
+      }
+      .note {
+        color: #526174;
+        font-size: 10pt;
+      }
+      .grid-two {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 7mm;
+      }
+      .mini {
+        border: 1px solid #dce4ee;
+        border-radius: 9px;
+        padding: 4mm;
+        background: #fbfcfe;
+      }
+      .mini h3 { margin-top: 0; }
+    </style>
+  </head>
+  <body>
+    <section class="cover">
+      <div>
+        <div class="brand"><span class="mark">K</span> Kalender</div>
+        <div class="hero-row">
+          <div>
+            <h1>Anleitung für neue Nutzer</h1>
+            <p class="subtitle">
+              Ein kompakter Einstieg in Kalender, Aufgaben, geteilte Kalender,
+              Tags und Quick Adds.
+            </p>
+          </div>
+          <img class="hero-shot" src="screenshots/month.png" alt="Kalender Monatsansicht" />
+        </div>
+      </div>
+      <div class="toc">
+        <strong>In dieser Anleitung:</strong>
+        Anmelden, Kalenderansichten, Tagesdetails, neue Einträge,
+        Aufgaben, Teilen, Tags, Quick Adds und Archiv.
+      </div>
+    </section>
+
+    <section class="page">
+      <h2>1. Anmelden und Orientierung</h2>
+      <div class="split">
+        <div>
+          <div class="annotated">
+            <img class="shot" src="screenshots/month.png" alt="Monatsansicht mit Navigation" />
+            <span class="pin blue" style="left: 27%; top: 4%;">1</span>
+            <span class="pin amber" style="right: 4%; top: 7%;">2</span>
+            <span class="pin green" style="left: 6%; bottom: 10%;">3</span>
+          </div>
+          <div class="legend">
+            <p><b class="blue">1</b> Ansicht wechseln: Month, Week, Day.</p>
+            <p><b class="amber">2</b> Filter: All, Mine oder Others.</p>
+            <p><b class="green">3</b> Calendar ist auch der Home-Button.</p>
+          </div>
+        </div>
+        <div>
+          <p>
+            Nach dem Anmelden landest du in der Kalenderansicht. Unten findest du
+            die vier Hauptbereiche: <strong>Calendar</strong>, <strong>Tasks</strong>,
+            <strong>Create</strong> und <strong>Settings</strong>.
+          </p>
+          <ol class="steps">
+            <li><span>Mit <strong>Month</strong>, <strong>Week</strong> und <strong>Day</strong> wechselst du die Ansicht.</span></li>
+            <li><span>Die Pfeile wechseln zum vorherigen oder nächsten Zeitraum. <strong>Today</strong> bringt dich zurück zu heute.</span></li>
+            <li><span>Der Schalter <strong>All</strong>, <strong>Mine</strong> oder <strong>Others</strong> filtert in der Monatsansicht nach Einträgen.</span></li>
+            <li><span><strong>Calendar</strong> unten links funktioniert wie ein Home-Button: Er bringt dich zurück zur Monatsansicht.</span></li>
+          </ol>
+          <div class="callout">
+            In der Monatsansicht öffnet ein Tipp auf einen Tag zuerst die Tagesdetails.
+            Das verhindert versehentliche neue Einträge.
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="page">
+      <h2>2. Tagesdetails nutzen</h2>
+      <div class="split">
+        <div>
+          <div class="annotated">
+            <img class="shot" src="screenshots/day-detail.png" alt="Tagesdetailansicht" />
+            <span class="pin blue" style="left: 7%; top: 18%;">1</span>
+            <span class="pin amber" style="right: 5%; top: 18%;">2</span>
+            <span class="pin green" style="left: 10%; top: 40%;">3</span>
+          </div>
+          <div class="legend">
+            <p><b class="blue">1</b> Zurück zur Monatsansicht.</p>
+            <p><b class="amber">2</b> Plus-Menü für diesen Tag öffnen.</p>
+            <p><b class="green">3</b> Eintrag antippen und bearbeiten.</p>
+          </div>
+        </div>
+        <div>
+          <p>
+            Die Tagesdetails zeigen alles, was für einen bestimmten Tag wichtig ist:
+            Termine, Aufgaben und die nächsten kommenden Einträge.
+          </p>
+          <ol class="steps">
+            <li><span>Tippe in der Monatsansicht auf einen Tag.</span></li>
+            <li><span>Nutze den Zurück-Pfeil, um wieder zur Monatsansicht zu kommen.</span></li>
+            <li><span>Tippe auf einen vorhandenen Eintrag, um ihn zu bearbeiten.</span></li>
+            <li><span>Nutze das Plus im Tageskopf, um direkt für diesen Tag etwas anzulegen.</span></li>
+          </ol>
+        </div>
+      </div>
+    </section>
+
+    <section class="page">
+      <h2>3. Neue Termine und Aufgaben erstellen</h2>
+      <div class="grid-two">
+        <div>
+          <div class="annotated">
+            <img class="shot" src="screenshots/create.png" alt="Auswahl Event oder Task" />
+            <span class="pin blue" style="left: 13%; top: 37%;">1</span>
+            <span class="pin amber" style="left: 13%; top: 57%;">2</span>
+          </div>
+          <h3>Create</h3>
+          <p>
+            Unten auf <strong>Create</strong> tippen. Danach wählen:
+            <strong>Event</strong> für einen Termin mit Start und Ende,
+            <strong>Task</strong> für eine Aufgabe an einem Tag.
+          </p>
+        </div>
+        <div>
+          <div class="annotated">
+            <img class="shot" src="screenshots/event-form.png" alt="Formular für neuen Termin" />
+            <span class="pin blue" style="left: 10%; top: 18%;">1</span>
+            <span class="pin amber" style="left: 8%; top: 43%;">2</span>
+            <span class="pin green" style="left: 10%; top: 56%;">3</span>
+          </div>
+          <h3>Formular</h3>
+          <p>
+            Im Formular trägst du Titel, Start, Ende und Tag ein. Unter
+            <strong>More options</strong> kannst du Kalender, Notizen und eine
+            Erinnerung 15 Minuten vorher festlegen.
+          </p>
+        </div>
+      </div>
+      <div class="callout">
+        Aufgaben werden in derselben Maske gespeichert. Du erkennst sie am Titel
+        mit <strong>Task:</strong> und kannst sie später im Bereich Tasks abhaken.
+      </div>
+    </section>
+
+    <section class="page">
+      <h2>4. Plus-Menü und Quick Add</h2>
+      <div class="split">
+        <div>
+          <div class="annotated">
+            <img class="shot" src="screenshots/day-add-menu.png" alt="Geöffnetes Plus-Menü in den Tagesdetails" />
+            <span class="pin blue" style="right: 11%; top: 25%;">1</span>
+            <span class="pin amber" style="left: 13%; top: 29%;">2</span>
+            <span class="pin green" style="right: 11%; top: 38%;">3</span>
+          </div>
+          <div class="legend">
+            <p><b class="blue">1</b> Erstes Plus öffnet das Menü.</p>
+            <p><b class="amber">2</b> Optional Quick Add auswählen.</p>
+            <p><b class="green">3</b> Zweites Plus startet das normale Anlegen.</p>
+          </div>
+        </div>
+        <div>
+          <p>
+            Wenn du aus einem bestimmten Tag heraus ein Event erstellen möchtest,
+            ist der Ablauf zweistufig:
+          </p>
+          <ol class="steps">
+            <li><span>Tippe in den Tagesdetails zuerst auf das große <strong>+</strong> rechts oben. Dadurch öffnet sich das kleine Erstellen-Menü.</span></li>
+            <li><span>Wenn du eine Vorlage nutzen möchtest, wähle unter <strong>Custom Quick Add</strong> einen Eintrag aus, zum Beispiel <strong>work</strong> oder <strong>gym</strong>.</span></li>
+            <li><span>Tippe danach im geöffneten Menü auf das zweite <strong>+</strong>. Die App öffnet dann das Event-Formular mit den passenden Vorgaben.</span></li>
+            <li><span>Wenn du keine Quick-Add-Vorlage auswählst, tippe einfach direkt auf das zweite <strong>+</strong>. Dann startest du einen normalen neuen Eintrag für diesen Tag.</span></li>
+          </ol>
+          <div class="callout">
+            Kurz gesagt: Plus antippen, optional Quick Add wählen, dann das Plus
+            im Menü antippen. Erst dieser zweite Plus-Klick öffnet den normalen Add-Flow.
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="page">
+      <h2>5. Aufgaben, Suche und Filter</h2>
+      <div class="split">
+        <div>
+          <div class="annotated">
+            <img class="shot" src="screenshots/tasks.png" alt="Aufgabenbereich" />
+            <span class="pin blue" style="left: 6%; top: 19%;">1</span>
+            <span class="pin amber" style="left: 8%; top: 47%;">2</span>
+            <span class="pin green" style="right: 13%; top: 31%;">3</span>
+          </div>
+          <div class="legend">
+            <p><b class="blue">1</b> Suche nach Titel oder Notiz.</p>
+            <p><b class="amber">2</b> Aufgabe abhaken.</p>
+            <p><b class="green">3</b> Zwischen Focus und Archive wechseln.</p>
+          </div>
+        </div>
+        <div>
+          <p>
+            Im Bereich <strong>Tasks</strong> findest du aktive Aufgaben und wichtige
+            Einträge der Woche. Die Suche filtert nach Titel oder Beschreibung.
+          </p>
+          <ol class="steps">
+            <li><span>Tippe auf einen Tag-Chip, um nur diese Art von Eintrag zu sehen.</span></li>
+            <li><span>Nutze die runde Checkbox links neben einer Aufgabe, um sie als erledigt zu markieren.</span></li>
+            <li><span>Wechsle zu <strong>Archive</strong>, um erledigte oder vergangene Einträge zu finden.</span></li>
+          </ol>
+          <p class="note">
+            Tags sind pro Kalender getrennt. Dadurch kann ein privater Kalender
+            eigene Farben und Namen haben, ohne den Arbeitskalender zu verändern.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="page">
+      <h2>6. Einstellungen, Kalender und Teilen</h2>
+      <div class="grid-two">
+        <div>
+          <div class="annotated">
+            <img class="shot" src="screenshots/settings.png" alt="Einstellungen mit Kalendern und Tags" />
+            <span class="pin blue" style="right: 5%; top: 22%;">1</span>
+            <span class="pin amber" style="right: 15%; top: 39%;">2</span>
+            <span class="pin green" style="right: 5%; top: 69%;">3</span>
+          </div>
+          <h3>Settings</h3>
+          <p>
+            In <strong>Settings</strong> verwaltest du Kalender, Tags, Quick Adds,
+            den Dark Mode und die Abmeldung.
+          </p>
+        </div>
+        <div>
+          <div class="annotated">
+            <img class="shot" src="screenshots/share.png" alt="Kalender teilen" />
+            <span class="pin blue" style="left: 12%; top: 28%;">1</span>
+            <span class="pin amber" style="left: 12%; top: 44%;">2</span>
+            <span class="pin green" style="right: 10%; bottom: 16%;">3</span>
+          </div>
+          <h3>Kalender teilen</h3>
+          <p>
+            Besitzer können einen Kalender per E-Mail teilen. Wähle
+            <strong>Collaborator</strong>, wenn die Person Einträge bearbeiten soll,
+            oder <strong>Viewer</strong>, wenn sie nur lesen darf.
+          </p>
+        </div>
+      </div>
+      <div class="callout">
+        Archivierte Kalender sind ausgeblendet, bis <strong>Show archived calendars</strong>
+        aktiviert wird. Archivieren ist gut für alte Projekte, Löschen entfernt
+        den Kalender dauerhaft.
+      </div>
+    </section>
+
+    <section class="page">
+      <h2>7. Quick Adds verwalten</h2>
+      <div class="split">
+        <div>
+          <div class="annotated">
+            <img class="shot" src="screenshots/quick-add.png" alt="Custom Quick Add Vorlage" />
+            <span class="pin blue" style="left: 10%; top: 20%;">1</span>
+            <span class="pin amber" style="left: 10%; top: 45%;">2</span>
+            <span class="pin green" style="right: 10%; bottom: 13%;">3</span>
+          </div>
+          <div class="legend">
+            <p><b class="blue">1</b> Shortcut, zum Beispiel work.</p>
+            <p><b class="amber">2</b> Dauer, Startzeit, Tag und Kalender.</p>
+            <p><b class="green">3</b> Vorlage speichern.</p>
+          </div>
+        </div>
+        <div>
+          <p>
+            Custom Quick Adds sind Vorlagen für wiederkehrende Einträge.
+            Du legst ein kurzes Stichwort, eine Standarddauer, optional eine Startzeit,
+            einen Tag und einen Kalender fest.
+          </p>
+          <ol class="steps">
+            <li><span>Öffne <strong>Settings</strong> und dann <strong>Custom Quick Adds</strong>.</span></li>
+            <li><span>Erstelle eine Vorlage, zum Beispiel <strong>work</strong> für einen Arbeitsblock.</span></li>
+            <li><span>In den Tagesdetails kannst du die Vorlage im Plus-Menü auswählen.</span></li>
+          </ol>
+          <p>
+            Praktische Beispiele: <strong>work</strong> für 09:00-17:00,
+            <strong>gym</strong> für 18:30-19:30 oder <strong>lunch</strong> für
+            eine kurze Mittagspause.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section class="page">
+      <h2>8. Gute Gewohnheiten</h2>
+      <div class="grid-two">
+        <div class="mini">
+          <h3>Tags sauber halten</h3>
+          <p>Nutze Tags für Bedeutung und Farbe, zum Beispiel Work, Personal oder Urgent.</p>
+        </div>
+        <div class="mini">
+          <h3>Kalender gezielt teilen</h3>
+          <p>Gib Bearbeitungsrechte nur an Personen, die wirklich Einträge ändern sollen.</p>
+        </div>
+        <div class="mini">
+          <h3>Tasks abhaken</h3>
+          <p>Erledigte Aufgaben verschwinden aus dem Fokus und bleiben im Archiv nachvollziehbar.</p>
+        </div>
+        <div class="mini">
+          <h3>Archiv statt Chaos</h3>
+          <p>Archivierte Kalender bleiben erhalten, stören aber nicht mehr im Alltag.</p>
+        </div>
+      </div>
+      <p class="note">
+        Diese Anleitung verwendet Demo-Daten. In der echten App siehst du nur
+        Kalender und Einträge, für die dein Konto berechtigt ist.
+      </p>
+    </section>
+  </body>
+</html>

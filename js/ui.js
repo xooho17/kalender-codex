@@ -44,6 +44,8 @@ export function bindElements() {
     'account-email',
     'calendar-list',
     'archived-toggle',
+    'tag-filter-panel',
+    'tag-filter-count',
     'category-filters',
     'weekly-overview',
     'event-search',
@@ -215,7 +217,11 @@ export function renderCalendars() {
 // tags; otherwise the union across visible calendars.
 export function renderTagFilters() {
   els.categoryFilters.innerHTML = '';
-  visibleTags().forEach((tag) => {
+  const tags = visibleTags();
+  if (els.tagFilterCount) {
+    els.tagFilterCount.textContent = String(tags.length);
+  }
+  tags.forEach((tag) => {
     const label = document.createElement('label');
     label.className = 'category-chip';
     label.innerHTML = `
@@ -432,6 +438,7 @@ export function renderCalendar() {
     tab.classList.toggle('active', tab.dataset.view === state.view),
   );
   renderMonthEntryScopeToggle();
+  els.calendarView.classList.toggle('day-detail-mode', Boolean(state.dayDetailDate));
 
   if (state.dayDetailDate) {
     renderDayDetail(state.dayDetailDate);
@@ -860,12 +867,12 @@ function renderDayDetail(date) {
   const upcoming = visibleEvents()
     .filter((event) => new Date(event.starts_at) > endOfDay(selected))
     .slice(0, 3);
-
-  els.periodTitle.textContent = selected.toLocaleDateString(undefined, {
-    weekday: 'short',
-    month: 'short',
+  const dayLabel = selected.toLocaleDateString(undefined, { weekday: 'long' });
+  const dateLabel = selected.toLocaleDateString(undefined, {
+    month: 'long',
     day: 'numeric',
   });
+
   els.calendarGrid.className = 'calendar-grid day-detail';
   els.calendarGrid.innerHTML = `
     <section class="day-detail-shell" data-date="${dateKey(selected)}">
@@ -875,12 +882,8 @@ function renderDayDetail(date) {
             <span aria-hidden="true">&lt;</span>
           </button>
           <div class="day-detail-title">
-            <p class="eyebrow">Selected day</p>
-            <h2>${selected.toLocaleDateString(undefined, {
-              weekday: 'long',
-              month: 'long',
-              day: 'numeric',
-            })}</h2>
+            <span>${dayLabel}</span>
+            <h2>${dateLabel}</h2>
           </div>
           <details class="day-detail-create">
             <summary aria-label="Add to this day">
