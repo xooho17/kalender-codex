@@ -104,7 +104,15 @@
             <div id="category-filters" class="category-filters"></div>
             <section class="side-section overview-section">
               <div class="section-heading">
-                <h2>This week</h2>
+                <h2 id="focus-overview-title">This week</h2>
+                <div class="focus-view-toggle" role="tablist" aria-label="Focus tasks view">
+                  <button class="focus-view-tab active" data-focus-view="focus" type="button">
+                    Focus
+                  </button>
+                  <button class="focus-view-tab" data-focus-view="archive" type="button">
+                    Archive
+                  </button>
+                </div>
               </div>
               <div id="weekly-overview" class="weekly-overview"></div>
             </section>

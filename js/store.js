@@ -11,6 +11,7 @@ export const state = {
   dayDetailDate: null,
   view: 'month',
   monthEntryScope: 'mine',
+  focusView: 'focus',
   search: '',
   showArchivedCalendars: false,
   selectedTagIds: new Set(),
@@ -97,6 +98,47 @@ export function visibleMonthEvents() {
     return visibleEvents().filter((event) => userId && event.created_by && event.created_by !== userId);
   }
   return visibleEvents();
+}
+
+export function visibleFocusEvents(referenceDate = new Date()) {
+  const weekStart = startOfLocalWeek(referenceDate);
+  const weekEnd = addLocalDays(weekStart, 7);
+  return visibleEvents()
+    .filter((event) => {
+      if (isArchivedFocusEvent(event, referenceDate)) return false;
+      const start = new Date(event.starts_at);
+      const isTask = isTaskEvent(event);
+      return isTask || (start >= weekStart && start < weekEnd);
+    })
+    .sort((a, b) => new Date(a.starts_at) - new Date(b.starts_at));
+}
+
+export function visibleFocusArchiveEvents(referenceDate = new Date()) {
+  return visibleEvents()
+    .filter((event) => isArchivedFocusEvent(event, referenceDate))
+    .sort((a, b) => new Date(b.starts_at) - new Date(a.starts_at));
+}
+
+export function isArchivedFocusEvent(event, referenceDate = new Date()) {
+  const weekStart = startOfLocalWeek(referenceDate);
+  if (isTaskEvent(event)) {
+    return Boolean(event.completed && new Date(event.starts_at) < weekStart);
+  }
+  return new Date(event.ends_at) < referenceDate;
+}
+
+function startOfLocalWeek(date) {
+  const next = new Date(date);
+  next.setHours(0, 0, 0, 0);
+  const day = next.getDay() || 7;
+  next.setDate(next.getDate() - day + 1);
+  return next;
+}
+
+function addLocalDays(date, days) {
+  const next = new Date(date);
+  next.setDate(next.getDate() + days);
+  return next;
 }
 
 // Re-sync selectedTagIds with whatever tags are currently visible. Called any

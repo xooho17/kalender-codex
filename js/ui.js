@@ -24,6 +24,8 @@ import {
   tagsForCalendar,
   uniqueById,
   visibleEvents,
+  visibleFocusArchiveEvents,
+  visibleFocusEvents,
   visibleMonthEvents,
   visibleTags,
 } from './store.js';
@@ -100,6 +102,7 @@ export function bindElements() {
     'share-role',
     'share-error',
     'type-picker-modal',
+    'focus-overview-title',
     'quick-add-template-list',
     'new-quick-add-template-btn',
     'quick-add-template-modal',
@@ -120,6 +123,7 @@ export function bindElements() {
   });
   els.viewTabs = [...document.querySelectorAll('.view-tab')];
   els.bottomTabs = [...document.querySelectorAll('.bottom-tab')];
+  els.focusViewTabs = [...document.querySelectorAll('[data-focus-view]')];
   els.appPanels = [...document.querySelectorAll('.app-panel')];
   els.closeModalButtons = [...document.querySelectorAll('[data-close-modal]')];
   return els;
@@ -449,24 +453,35 @@ export function renderMonthEntryScopeToggle() {
 }
 
 export function renderWeeklyOverview() {
-  const weekStart = startOfWeek(new Date());
-  const upcoming = visibleEvents()
-    .filter((event) => {
-      const start = new Date(event.starts_at);
-      return start >= weekStart && start < addDays(weekStart, 7);
-    })
-    .slice(0, 6);
+  const isArchive = state.focusView === 'archive';
+  const events = (isArchive ? visibleFocusArchiveEvents() : visibleFocusEvents()).slice(0, 12);
+
+  if (els.focusOverviewTitle) {
+    els.focusOverviewTitle.textContent = isArchive ? 'Archive' : 'This week';
+  }
+  els.focusViewTabs.forEach((tab) => {
+    const active = tab.dataset.focusView === state.focusView;
+    tab.classList.toggle('active', active);
+    tab.setAttribute('aria-selected', active ? 'true' : 'false');
+  });
 
   els.weeklyOverview.innerHTML =
-    upcoming.length === 0
-      ? '<p class="empty-note">No events this week.</p>'
-      : upcoming
+    events.length === 0
+      ? `<p class="empty-note">${isArchive ? 'No archived focus items.' : 'No active focus items this week.'}</p>`
+      : events
           .map(
             (event) => `
-              <div class="overview-event ${event.completed ? 'completed' : ''}">
+              <div class="overview-event ${event.completed ? 'completed' : ''}${isArchive ? ' archived' : ''}">
         <span style="--event-color:${safeColor(eventColor(event))}"></span>
         ${
-          isTaskEvent(event)
+          isArchive
+            ? `<button
+                class="overview-restore"
+                type="button"
+                data-restore-event-id="${event.id}"
+                aria-label="${isTaskEvent(event) ? 'Restore task' : 'Move event to today'}"
+              >Restore</button>`
+            : isTaskEvent(event)
             ? `<button
                 class="task-check"
                 type="button"
@@ -919,27 +934,30 @@ function renderDayDetail(date) {
         count: otherEvents.length,
         events: otherEvents,
         emptyText: 'No events for this day.',
+        defaultOpen: true,
       })}
       ${renderDayDetailSection({
         title: 'Tasks',
         count: tasks.length,
         events: tasks,
         emptyText: 'No tasks for this day.',
+        defaultOpen: true,
       })}
       ${renderDayDetailSection({
         title: 'Upcoming',
         count: upcoming.length,
         events: upcoming,
         emptyText: 'Nothing else coming up.',
+        defaultOpen: false,
       })}
     </section>
   `;
 }
 
-function renderDayDetailSection({ title, count, events, emptyText }) {
-  const hasEvents = events.length > 0;
+function renderDayDetailSection({ title, count, events, emptyText, defaultOpen = false }) {
+  const isOpen = defaultOpen && events.length > 0;
   return `
-    <details class="day-detail-section" ${hasEvents ? 'open' : ''}>
+    <details class="day-detail-section" ${isOpen ? 'open' : ''}>
       <summary>
         <span>${title}</span>
         <strong>${count}</strong>

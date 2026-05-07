@@ -41,6 +41,7 @@ import {
   canEditCalendar,
   defaultTagFor,
   findTag,
+  isTaskEvent,
   state,
   syncSelectedTags,
   uniqueById,
@@ -84,6 +85,7 @@ let lastResumeAt = 0;
 let searchRenderTimer = 0;
 let refreshRequestId = 0;
 let tagDeleteInFlight = false;
+const FOCUS_EVENT_HISTORY_DAYS = 180;
 // Realtime echoes our own writes back. Suppress the "Calendar updated" toast
 // for a short window after any local mutation finishes, so a save shows
 // exactly one toast ("Event saved") instead of two.
@@ -199,6 +201,9 @@ function bindUiEvents() {
   els.viewTabs.forEach((tab) => {
     tab.addEventListener('click', () => {
       state.view = tab.dataset.view;
+      if (state.view === 'week' || state.view === 'day') {
+        state.selectedDate = new Date();
+      }
       state.dayDetailDate = null;
       refreshEventsAndRender();
     });
@@ -227,6 +232,10 @@ function bindUiEvents() {
         return;
       }
       setActivePanel(tab.dataset.tab);
+      if (tab.dataset.tab === 'tasks') {
+        renderAll();
+        void loadFocusEvents();
+      }
     });
   });
 
@@ -265,6 +274,14 @@ function bindUiEvents() {
         : new Set([event.target.value]);
       renderAll();
     }
+  });
+
+  els.focusViewTabs.forEach((tab) => {
+    tab.addEventListener('click', () => {
+      state.focusView = tab.dataset.focusView;
+      renderAll();
+      void loadFocusEvents();
+    });
   });
 
   if (els.archivedToggle) {
@@ -375,6 +392,11 @@ function bindUiEvents() {
 
     const eventButton = event.target.closest('[data-event-id]');
     if (eventButton) {
+      if (state.view === 'month' && !state.dayDetailDate) {
+        const dated = eventButton.closest('[data-date]');
+        if (dated) openDayDetail(new Date(`${dated.dataset.date}T00:00:00`));
+        return;
+      }
       const calendarEvent = state.events.find((item) => item.id === eventButton.dataset.eventId);
       if (calendarEvent) openEventModal(calendarEvent);
       return;
@@ -403,6 +425,12 @@ function bindUiEvents() {
   bindSwipeNavigation();
 
   els.weeklyOverview.addEventListener('click', (event) => {
+    const restoreButton = event.target.closest('[data-restore-event-id]');
+    if (restoreButton) {
+      handleRestoreFocusItem(restoreButton.dataset.restoreEventId);
+      return;
+    }
+
     const completeButton = event.target.closest('[data-complete-event-id]');
     if (completeButton) {
       handleToggleComplete(completeButton.dataset.completeEventId);
@@ -543,6 +571,31 @@ async function refreshEventsAndRender() {
     scheduleReminders();
   } catch (error) {
     showToast(error.message || 'Events could not be loaded.');
+  }
+}
+
+async function loadFocusEvents() {
+  const calendarIds = state.calendars
+    .filter((calendar) => !calendar.archived_at || state.showArchivedCalendars)
+    .map((calendar) => calendar.id);
+  if (!calendarIds.length) {
+    renderAll();
+    return;
+  }
+
+  const requestId = ++refreshRequestId;
+  const today = startOfDay(new Date());
+  const rangeStart = addDays(today, -FOCUS_EVENT_HISTORY_DAYS);
+  const rangeEnd = addDays(today, 8);
+
+  try {
+    const events = await fetchEvents(calendarIds, rangeStart, rangeEnd);
+    if (requestId !== refreshRequestId) return;
+    state.events = uniqueById([...events, ...state.events]);
+    renderAll();
+    scheduleReminders();
+  } catch (error) {
+    showToast(error.message || 'Focus items could not be loaded.');
   }
 }
 
@@ -956,6 +1009,57 @@ async function handleToggleComplete(eventId) {
   } catch {
     // rollback + toast handled inside withOptimisticUpdate
   }
+}
+
+async function handleRestoreFocusItem(eventId) {
+  const event = state.events.find((item) => item.id === eventId);
+  if (!event) return;
+  if (!canEditCalendar(event.calendar_id)) {
+    showToast('You do not have permission to restore this item.');
+    return;
+  }
+
+  const restored = isTaskEvent(event) && event.completed
+    ? { ...event, completed: false }
+    : { ...event, ...restoreEventTiming(event) };
+
+  try {
+    await withOptimisticUpdate({
+      apply: () => {
+        state.events = state.events.map((item) => (item.id === eventId ? restored : item));
+      },
+      persist: () =>
+        isTaskEvent(event) && event.completed
+          ? setEventCompleted(eventId, false)
+          : saveEvent(restored),
+      errorMessage: (error) => error.message || 'Could not restore this item.',
+    });
+    markLocalMutation();
+    showToast(isTaskEvent(event) ? 'Task restored' : 'Event moved to today');
+  } catch {
+    // rollback + toast handled inside withOptimisticUpdate
+  }
+}
+
+function restoreEventTiming(event) {
+  const originalStart = new Date(event.starts_at);
+  const originalEnd = new Date(event.ends_at);
+  const durationMs = Math.max(15 * 60 * 1000, originalEnd - originalStart);
+  const now = new Date();
+  const start = startOfDay(now);
+  start.setHours(originalStart.getHours(), originalStart.getMinutes(), 0, 0);
+
+  if (start < now) {
+    start.setTime(now.getTime());
+    start.setSeconds(0, 0);
+    const roundedMinutes = Math.ceil(start.getMinutes() / 15) * 15;
+    start.setMinutes(roundedMinutes);
+  }
+
+  return {
+    starts_at: start.toISOString(),
+    ends_at: new Date(start.getTime() + durationMs).toISOString(),
+  };
 }
 
 async function handleEventDrop(event) {

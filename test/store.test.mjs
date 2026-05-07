@@ -13,6 +13,8 @@ import {
   syncSelectedTags,
   tagsForCalendar,
   visibleEvents,
+  visibleFocusArchiveEvents,
+  visibleFocusEvents,
   visibleMonthEvents,
   visibleTags,
 } from '../js/store.js';
@@ -35,6 +37,7 @@ beforeEach(() => {
   state.session = { user: { id: 'user-me', email: 'me@example.com' } };
   state.activeCalendarId = null;
   state.monthEntryScope = 'mine';
+  state.focusView = 'focus';
   state.search = '';
   state.showArchivedCalendars = false;
   state.selectedTagIds = new Set();
@@ -226,4 +229,80 @@ test('visibleMonthEvents - others scope only shows collaborator entries with a k
   state.monthEntryScope = 'others';
   syncSelectedTags();
   assert.deepEqual(visibleMonthEvents().map((e) => e.id), ['e2']);
+});
+
+test('visibleFocusEvents hides past events but keeps open overdue tasks', () => {
+  const now = new Date('2026-05-07T12:00:00');
+  state.events = [
+    {
+      id: 'past-event',
+      calendar_id: 'cal-a',
+      title: 'Past event',
+      description: '',
+      tag_id: tagA1.id,
+      starts_at: '2026-05-07T08:00:00',
+      ends_at: '2026-05-07T09:00:00',
+    },
+    {
+      id: 'future-event',
+      calendar_id: 'cal-a',
+      title: 'Future event',
+      description: '',
+      tag_id: tagA1.id,
+      starts_at: '2026-05-07T15:00:00',
+      ends_at: '2026-05-07T16:00:00',
+    },
+    {
+      id: 'open-old-task',
+      calendar_id: 'cal-a',
+      title: 'Task: overdue',
+      description: '',
+      tag_id: tagA1.id,
+      starts_at: '2026-04-28T10:00:00',
+      ends_at: '2026-04-28T11:00:00',
+      completed: false,
+    },
+  ];
+  syncSelectedTags();
+  assert.deepEqual(visibleFocusEvents(now).map((e) => e.id), ['open-old-task', 'future-event']);
+});
+
+test('visibleFocusArchiveEvents contains past events and old completed tasks', () => {
+  const now = new Date('2026-05-07T12:00:00');
+  state.events = [
+    {
+      id: 'past-event',
+      calendar_id: 'cal-a',
+      title: 'Past event',
+      description: '',
+      tag_id: tagA1.id,
+      starts_at: '2026-05-07T08:00:00',
+      ends_at: '2026-05-07T09:00:00',
+    },
+    {
+      id: 'old-done-task',
+      calendar_id: 'cal-a',
+      title: 'Task: done',
+      description: '',
+      tag_id: tagA1.id,
+      starts_at: '2026-04-28T10:00:00',
+      ends_at: '2026-04-28T11:00:00',
+      completed: true,
+    },
+    {
+      id: 'current-done-task',
+      calendar_id: 'cal-a',
+      title: 'Task: current done',
+      description: '',
+      tag_id: tagA1.id,
+      starts_at: '2026-05-06T10:00:00',
+      ends_at: '2026-05-06T11:00:00',
+      completed: true,
+    },
+  ];
+  syncSelectedTags();
+  assert.deepEqual(
+    visibleFocusArchiveEvents(now).map((e) => e.id).sort(),
+    ['old-done-task', 'past-event'].sort(),
+  );
 });
