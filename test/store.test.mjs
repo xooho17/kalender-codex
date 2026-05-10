@@ -336,9 +336,36 @@ test('findFreeTimeSlots returns gaps across busy events', () => {
   assert.deepEqual(
     slots.map((slot) => [new Date(slot.starts_at).getHours(), new Date(slot.starts_at).getMinutes()]),
     [
+      [13, 0],
       [10, 30],
       [11, 0],
-      [13, 0],
+    ],
+  );
+});
+
+test('findFreeTimeSlots limits each day to three slots and prefers 13-18', () => {
+  const slots = findFreeTimeSlots([], {
+    startDate: new Date('2026-05-11T00:00:00'),
+    days: 2,
+    durationMinutes: 60,
+    windowStartMinutes: 9 * 60,
+    windowEndMinutes: 19 * 60,
+    stepMinutes: 60,
+  });
+
+  assert.equal(slots.length, 6);
+  assert.deepEqual(
+    slots.map((slot) => [
+      new Date(slot.starts_at).getDate(),
+      new Date(slot.starts_at).getHours(),
+    ]),
+    [
+      [11, 13],
+      [11, 14],
+      [11, 15],
+      [12, 13],
+      [12, 14],
+      [12, 15],
     ],
   );
 });

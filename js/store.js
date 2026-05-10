@@ -138,7 +138,10 @@ export function findFreeTimeSlots(events, options) {
     durationMinutes,
     windowStartMinutes,
     windowEndMinutes,
-    maxSlots = 12,
+    maxSlots = Infinity,
+    maxSlotsPerDay = 3,
+    preferredStartMinutes = 13 * 60,
+    preferredEndMinutes = 18 * 60,
     stepMinutes = 30,
   } = options;
 
@@ -150,6 +153,7 @@ export function findFreeTimeSlots(events, options) {
     const day = addLocalDays(startOfLocalDay(startDate), dayIndex);
     const windowStart = dateAtMinutes(day, windowStartMinutes);
     const windowEnd = dateAtMinutes(day, windowEndMinutes);
+    const daySlots = [];
     const busy = events
       .filter((event) => !event.completed)
       .map((event) => ({
@@ -175,10 +179,10 @@ export function findFreeTimeSlots(events, options) {
 
     let cursor = new Date(windowStart);
     [...merged, { start: windowEnd, end: windowEnd }].forEach((block) => {
-      while (block.start.getTime() - cursor.getTime() >= durationMs && slots.length < maxSlots) {
+      while (block.start.getTime() - cursor.getTime() >= durationMs) {
         const start = new Date(cursor);
         const end = new Date(start.getTime() + durationMs);
-        slots.push({
+        daySlots.push({
           id: `slot-${start.getTime()}`,
           starts_at: start.toISOString(),
           ends_at: end.toISOString(),
@@ -188,9 +192,34 @@ export function findFreeTimeSlots(events, options) {
       }
       if (block.end > cursor) cursor = new Date(block.end);
     });
+
+    rankFreeTimeDaySlots(daySlots, preferredStartMinutes, preferredEndMinutes)
+      .slice(0, maxSlotsPerDay)
+      .forEach((slot) => {
+        if (slots.length < maxSlots) slots.push(slot);
+      });
   }
 
   return slots;
+}
+
+function rankFreeTimeDaySlots(slots, preferredStartMinutes, preferredEndMinutes) {
+  return [...slots].sort((a, b) => {
+    const aPreferred = isPreferredFreeTimeSlot(a, preferredStartMinutes, preferredEndMinutes);
+    const bPreferred = isPreferredFreeTimeSlot(b, preferredStartMinutes, preferredEndMinutes);
+    if (aPreferred !== bPreferred) return aPreferred ? -1 : 1;
+    return new Date(a.starts_at) - new Date(b.starts_at);
+  });
+}
+
+function isPreferredFreeTimeSlot(slot, preferredStartMinutes, preferredEndMinutes) {
+  const start = minutesFromLocalMidnight(new Date(slot.starts_at));
+  const end = minutesFromLocalMidnight(new Date(slot.ends_at));
+  return start >= preferredStartMinutes && end <= preferredEndMinutes;
+}
+
+function minutesFromLocalMidnight(date) {
+  return date.getHours() * 60 + date.getMinutes();
 }
 
 function startOfLocalDay(date) {

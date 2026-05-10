@@ -103,14 +103,25 @@
               <div id="category-filters" class="category-filters"></div>
             </details>
             <section class="side-section free-time-section">
-              <div class="section-heading">
-                <h2>Free Time</h2>
+              <div class="section-heading free-time-heading">
+                <div class="free-time-title-actions">
+                  <h2>Free Time</h2>
+                  <button
+                    id="free-time-config-toggle"
+                    class="free-time-config-toggle"
+                    type="button"
+                    aria-controls="free-time-config"
+                    aria-expanded="false"
+                  >
+                    Config
+                  </button>
+                </div>
+                <button class="free-time-find-button" type="submit" form="free-time-form">
+                  Find slots
+                </button>
               </div>
               <form id="free-time-form" class="free-time-card">
-                <details id="free-time-config" class="free-time-config">
-                  <summary>
-                    <span>Configuration</span>
-                  </summary>
+                <div id="free-time-config" class="free-time-config" hidden>
                   <div class="free-time-grid">
                     <label>
                       From date
@@ -141,10 +152,8 @@
                       </label>
                     </div>
                   </div>
-                </details>
-                <button class="primary-action" type="submit">Find slots</button>
+                </div>
               </form>
-              <div id="free-time-results" class="free-time-results"></div>
             </section>
             <section class="side-section overview-section">
               <div class="section-heading">
@@ -318,6 +327,23 @@
           <span>Something to get done that day</span>
         </button>
       </div>
+    </dialog>
+
+    <dialog
+      id="free-time-results-modal"
+      class="modal free-time-results-modal"
+      aria-labelledby="free-time-results-title"
+    >
+      <div class="modal-header">
+        <div>
+          <p class="eyebrow">Free Time</p>
+          <h2 id="free-time-results-title">Open slots</h2>
+        </div>
+        <button class="icon-button" type="button" data-close-modal aria-label="Close free time results">
+          x
+        </button>
+      </div>
+      <div id="free-time-results" class="free-time-results"></div>
     </dialog>
 
     <dialog id="calendar-modal" class="modal">

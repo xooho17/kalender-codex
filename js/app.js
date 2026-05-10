@@ -57,6 +57,7 @@ import {
   openCalendarModal,
   openDayDetail,
   openEventModal,
+  openFreeTimeResultsModal,
   openQuickAddTemplateModal,
   openShareModal,
   openTagDeleteModal,
@@ -292,18 +293,23 @@ function bindUiEvents() {
     els.freeTimeForm.addEventListener('input', persistFreeTimePreferences);
     els.freeTimeForm.addEventListener('change', persistFreeTimePreferences);
   }
+  if (els.freeTimeConfigToggle && els.freeTimeConfig) {
+    els.freeTimeConfigToggle.addEventListener('click', () => {
+      const nextExpanded = els.freeTimeConfig.hidden;
+      els.freeTimeConfig.hidden = !nextExpanded;
+      els.freeTimeConfigToggle.setAttribute('aria-expanded', String(nextExpanded));
+    });
+  }
   if (els.freeTimeResults) {
     els.freeTimeResults.addEventListener('click', (event) => {
-      if (event.target.closest('[data-free-time-results-summary]')) {
-        window.setTimeout(() => {
-          const panel = els.freeTimeResults.querySelector('.free-time-results-panel');
-          state.freeTimeResultsOpen = Boolean(panel?.open);
-        }, 0);
-        return;
-      }
       const shareButton = event.target.closest('[data-share-free-time]');
       if (!shareButton) return;
       handleShareFreeTime(shareButton.dataset.shareFreeTime);
+    });
+  }
+  if (els.freeTimeResultsModal) {
+    els.freeTimeResultsModal.addEventListener('close', () => {
+      state.freeTimeResultsOpen = false;
     });
   }
 
@@ -629,9 +635,10 @@ async function handleFindFreeTime(event) {
     query = readFreeTimeForm();
   } catch (error) {
     state.freeTimeSlots = [];
-    state.freeTimeResultsOpen = false;
+    state.freeTimeResultsOpen = true;
     state.freeTimeStatus = error.message || 'Could not read free-time settings.';
     renderAll();
+    openFreeTimeResultsModal();
     return;
   }
 
@@ -640,17 +647,19 @@ async function handleFindFreeTime(event) {
     .map((calendar) => calendar.id);
   if (!calendarIds.length) {
     state.freeTimeSlots = [];
-    state.freeTimeResultsOpen = false;
+    state.freeTimeResultsOpen = true;
     state.freeTimeStatus = 'No visible calendars to check.';
     renderAll();
+    openFreeTimeResultsModal();
     return;
   }
 
   state.freeTimeSlots = [];
-  state.freeTimeResultsOpen = false;
+  state.freeTimeResultsOpen = true;
   state.freeTimeQuery = { ...query, calendarCount: calendarIds.length };
   state.freeTimeStatus = `Checking ${calendarIds.length} calendar${calendarIds.length === 1 ? '' : 's'}...`;
   renderAll();
+  openFreeTimeResultsModal();
 
   const rangeStart = startOfDay(query.startDate);
   const rangeEnd = addDays(rangeStart, query.days);
@@ -662,14 +671,14 @@ async function handleFindFreeTime(event) {
       ...query,
       calendarCount: calendarIds.length,
     });
-    state.freeTimeResultsOpen = state.freeTimeSlots.length > 0;
+    state.freeTimeResultsOpen = true;
     state.freeTimeStatus = state.freeTimeSlots.length
       ? `${state.freeTimeSlots.length} open slot${state.freeTimeSlots.length === 1 ? '' : 's'} found`
       : 'No open slots in that window.';
     renderAll();
   } catch (error) {
     state.freeTimeSlots = [];
-    state.freeTimeResultsOpen = false;
+    state.freeTimeResultsOpen = true;
     state.freeTimeStatus = error.message || 'Free-time search failed.';
     renderAll();
   }

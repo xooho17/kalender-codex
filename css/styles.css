@@ -1339,58 +1339,70 @@ textarea:focus {
   font-weight: 850;
 }
 
-.free-time-config,
-.free-time-results-panel {
-  border-radius: 16px;
-  background: var(--surface);
-  padding: 4px 10px 10px;
+.free-time-section {
+  gap: 8px;
 }
 
-.free-time-config summary,
-.free-time-results-panel summary {
-  display: flex;
-  min-height: 42px;
+.free-time-heading {
   align-items: center;
-  justify-content: space-between;
-  gap: 10px;
+}
+
+.free-time-title-actions {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.free-time-config-toggle,
+.free-time-find-button {
+  min-height: 32px;
+  border: 1px solid color-mix(in srgb, var(--primary) 30%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--primary) 12%, var(--surface));
   color: var(--ink);
-  cursor: pointer;
-  font-size: 0.82rem;
+  padding: 0 10px;
+  font-size: 0.72rem;
   font-weight: 850;
-  list-style: none;
 }
 
-.free-time-config summary::-webkit-details-marker,
-.free-time-results-panel summary::-webkit-details-marker {
-  display: none;
+.free-time-config-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
 }
 
-.free-time-config summary::after,
-.free-time-results-panel summary::after {
+.free-time-config-toggle::after {
   content: "";
-  width: 9px;
-  height: 9px;
-  border-right: 2px solid var(--muted);
-  border-bottom: 2px solid var(--muted);
+  width: 7px;
+  height: 7px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
   transform: rotate(45deg) translateY(-2px);
+  transition: transform 160ms ease;
 }
 
-.free-time-config[open] summary::after,
-.free-time-results-panel[open] summary::after {
+.free-time-config-toggle[aria-expanded="true"]::after {
   transform: rotate(225deg) translate(-2px, -1px);
 }
 
-.free-time-results-panel summary strong {
-  margin-left: auto;
-  color: var(--muted);
-  font-size: 0.72rem;
+.free-time-find-button {
+  background: var(--primary);
+  color: #09213e;
+  white-space: nowrap;
 }
 
 .free-time-card {
   display: grid;
-  gap: 12px;
+  gap: 10px;
   min-width: 0;
   background: transparent;
+}
+
+.free-time-config {
+  border-radius: 16px;
+  background: var(--surface);
   padding: 12px;
 }
 
@@ -1432,14 +1444,22 @@ textarea:focus {
 
 .free-time-results {
   display: grid;
-  gap: 8px;
+  gap: 12px;
   min-width: 0;
 }
 
-.free-time-results-panel-body {
+.free-time-results-modal {
+  width: min(440px, calc(100vw - 18px));
+}
+
+.free-time-results-modal[open] {
+  display: grid;
+  gap: 14px;
+}
+
+.free-time-slot-list {
   display: grid;
   gap: 8px;
-  padding-top: 4px;
 }
 
 .free-time-result-head {

@@ -52,11 +52,14 @@ export function bindElements() {
     'weekly-overview',
     'event-search',
     'free-time-form',
+    'free-time-config',
+    'free-time-config-toggle',
     'free-time-date',
     'free-time-end-date',
     'free-time-duration',
     'free-time-window-start',
     'free-time-window-end',
+    'free-time-results-modal',
     'free-time-results',
     'theme-toggle',
     'logout-btn',
@@ -315,18 +318,13 @@ export function renderFreeTimeFinder() {
   }
 
   els.freeTimeResults.innerHTML = `
-    <details class="free-time-results-panel" ${state.freeTimeResultsOpen ? 'open' : ''}>
-      <summary data-free-time-results-summary>
-        <span>Results</span>
-        <strong>${slots.length}</strong>
-      </summary>
-      <div class="free-time-results-panel-body">
-        <div class="free-time-result-head">
-          <span>${escapeHtml(status)}</span>
-          <button class="ghost-action free-time-share-all" type="button" data-share-free-time="all">
-            Share all
-          </button>
-        </div>
+    <div class="free-time-result-head">
+      <span>${escapeHtml(status)}</span>
+      <button class="ghost-action free-time-share-all" type="button" data-share-free-time="all">
+        Share all
+      </button>
+    </div>
+    <div class="free-time-slot-list">
         ${slots
           .map(
             (slot) => `
@@ -342,9 +340,15 @@ export function renderFreeTimeFinder() {
             `,
           )
           .join('')}
-      </div>
-    </details>
+    </div>
   `;
+}
+
+export function openFreeTimeResultsModal() {
+  if (!els.freeTimeResultsModal) return;
+  if (!els.freeTimeResultsModal.open) {
+    els.freeTimeResultsModal.showModal();
+  }
 }
 
 function ensureFreeTimeDefaults() {
