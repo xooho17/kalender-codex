@@ -16,6 +16,10 @@ export const state = {
   showArchivedCalendars: false,
   selectedTagIds: new Set(),
   realtimeChannel: null,
+  freeTimeSlots: [],
+  freeTimeStatus: 'Find open slots across your visible calendars.',
+  freeTimeQuery: null,
+  freeTimeResultsOpen: false,
 };
 
 const FALLBACK_TAG = Object.freeze({
@@ -125,6 +129,80 @@ export function isArchivedFocusEvent(event, referenceDate = new Date()) {
     return Boolean(event.completed && new Date(event.starts_at) < weekStart);
   }
   return new Date(event.ends_at) < referenceDate;
+}
+
+export function findFreeTimeSlots(events, options) {
+  const {
+    startDate,
+    days,
+    durationMinutes,
+    windowStartMinutes,
+    windowEndMinutes,
+    maxSlots = 12,
+    stepMinutes = 30,
+  } = options;
+
+  const durationMs = durationMinutes * 60 * 1000;
+  const stepMs = stepMinutes * 60 * 1000;
+  const slots = [];
+
+  for (let dayIndex = 0; dayIndex < days && slots.length < maxSlots; dayIndex += 1) {
+    const day = addLocalDays(startOfLocalDay(startDate), dayIndex);
+    const windowStart = dateAtMinutes(day, windowStartMinutes);
+    const windowEnd = dateAtMinutes(day, windowEndMinutes);
+    const busy = events
+      .filter((event) => !event.completed)
+      .map((event) => ({
+        start: new Date(event.starts_at),
+        end: new Date(event.ends_at),
+      }))
+      .filter((event) => event.start < windowEnd && event.end > windowStart)
+      .map((event) => ({
+        start: new Date(Math.max(event.start.getTime(), windowStart.getTime())),
+        end: new Date(Math.min(event.end.getTime(), windowEnd.getTime())),
+      }))
+      .sort((a, b) => a.start - b.start);
+
+    const merged = [];
+    busy.forEach((event) => {
+      const last = merged[merged.length - 1];
+      if (!last || event.start > last.end) {
+        merged.push({ ...event });
+      } else if (event.end > last.end) {
+        last.end = event.end;
+      }
+    });
+
+    let cursor = new Date(windowStart);
+    [...merged, { start: windowEnd, end: windowEnd }].forEach((block) => {
+      while (block.start.getTime() - cursor.getTime() >= durationMs && slots.length < maxSlots) {
+        const start = new Date(cursor);
+        const end = new Date(start.getTime() + durationMs);
+        slots.push({
+          id: `slot-${start.getTime()}`,
+          starts_at: start.toISOString(),
+          ends_at: end.toISOString(),
+          calendar_count: options.calendarCount || 0,
+        });
+        cursor = new Date(cursor.getTime() + stepMs);
+      }
+      if (block.end > cursor) cursor = new Date(block.end);
+    });
+  }
+
+  return slots;
+}
+
+function startOfLocalDay(date) {
+  const next = new Date(date);
+  next.setHours(0, 0, 0, 0);
+  return next;
+}
+
+function dateAtMinutes(date, minutes) {
+  const next = startOfLocalDay(date);
+  next.setMinutes(minutes);
+  return next;
 }
 
 function startOfLocalWeek(date) {

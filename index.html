@@ -102,6 +102,50 @@
               </summary>
               <div id="category-filters" class="category-filters"></div>
             </details>
+            <section class="side-section free-time-section">
+              <div class="section-heading">
+                <h2>Free Time</h2>
+              </div>
+              <form id="free-time-form" class="free-time-card">
+                <details id="free-time-config" class="free-time-config">
+                  <summary>
+                    <span>Configuration</span>
+                  </summary>
+                  <div class="free-time-grid">
+                    <label>
+                      From date
+                      <input id="free-time-date" type="date" />
+                    </label>
+                    <label>
+                      To date
+                      <input id="free-time-end-date" type="date" />
+                    </label>
+                    <label>
+                      Duration
+                      <select id="free-time-duration">
+                        <option value="30">30 min</option>
+                        <option value="45">45 min</option>
+                        <option value="60" selected>60 min</option>
+                        <option value="90">90 min</option>
+                        <option value="120">120 min</option>
+                      </select>
+                    </label>
+                    <div class="free-time-window">
+                      <label>
+                        From
+                        <input id="free-time-window-start" type="time" value="09:00" />
+                      </label>
+                      <label>
+                        To
+                        <input id="free-time-window-end" type="time" value="18:00" />
+                      </label>
+                    </div>
+                  </div>
+                </details>
+                <button class="primary-action" type="submit">Find slots</button>
+              </form>
+              <div id="free-time-results" class="free-time-results"></div>
+            </section>
             <section class="side-section overview-section">
               <div class="section-heading">
                 <h2 id="focus-overview-title">This week</h2>

@@ -40,6 +40,7 @@ import {
 import {
   canEditCalendar,
   defaultTagFor,
+  findFreeTimeSlots,
   findTag,
   isTaskEvent,
   state,
@@ -62,7 +63,9 @@ import {
   openTagModal,
   openTypePicker,
   populateQuickAddTemplateTagOptions,
+  persistFreeTimePreferences,
   readEventForm,
+  readFreeTimeForm,
   readQuickAddTemplateForm,
   readTagForm,
   renderAll,
@@ -283,6 +286,26 @@ function bindUiEvents() {
       void loadFocusEvents();
     });
   });
+
+  if (els.freeTimeForm) {
+    els.freeTimeForm.addEventListener('submit', handleFindFreeTime);
+    els.freeTimeForm.addEventListener('input', persistFreeTimePreferences);
+    els.freeTimeForm.addEventListener('change', persistFreeTimePreferences);
+  }
+  if (els.freeTimeResults) {
+    els.freeTimeResults.addEventListener('click', (event) => {
+      if (event.target.closest('[data-free-time-results-summary]')) {
+        window.setTimeout(() => {
+          const panel = els.freeTimeResults.querySelector('.free-time-results-panel');
+          state.freeTimeResultsOpen = Boolean(panel?.open);
+        }, 0);
+        return;
+      }
+      const shareButton = event.target.closest('[data-share-free-time]');
+      if (!shareButton) return;
+      handleShareFreeTime(shareButton.dataset.shareFreeTime);
+    });
+  }
 
   if (els.archivedToggle) {
     els.archivedToggle.addEventListener('change', async () => {
@@ -597,6 +620,114 @@ async function loadFocusEvents() {
   } catch (error) {
     showToast(error.message || 'Focus items could not be loaded.');
   }
+}
+
+async function handleFindFreeTime(event) {
+  event.preventDefault();
+  let query;
+  try {
+    query = readFreeTimeForm();
+  } catch (error) {
+    state.freeTimeSlots = [];
+    state.freeTimeResultsOpen = false;
+    state.freeTimeStatus = error.message || 'Could not read free-time settings.';
+    renderAll();
+    return;
+  }
+
+  const calendarIds = state.calendars
+    .filter((calendar) => !calendar.archived_at || state.showArchivedCalendars)
+    .map((calendar) => calendar.id);
+  if (!calendarIds.length) {
+    state.freeTimeSlots = [];
+    state.freeTimeResultsOpen = false;
+    state.freeTimeStatus = 'No visible calendars to check.';
+    renderAll();
+    return;
+  }
+
+  state.freeTimeSlots = [];
+  state.freeTimeResultsOpen = false;
+  state.freeTimeQuery = { ...query, calendarCount: calendarIds.length };
+  state.freeTimeStatus = `Checking ${calendarIds.length} calendar${calendarIds.length === 1 ? '' : 's'}...`;
+  renderAll();
+
+  const rangeStart = startOfDay(query.startDate);
+  const rangeEnd = addDays(rangeStart, query.days);
+
+  try {
+    const events = await fetchEvents(calendarIds, rangeStart, rangeEnd);
+    state.events = uniqueById([...events, ...state.events]);
+    state.freeTimeSlots = findFreeTimeSlots(events, {
+      ...query,
+      calendarCount: calendarIds.length,
+    });
+    state.freeTimeResultsOpen = state.freeTimeSlots.length > 0;
+    state.freeTimeStatus = state.freeTimeSlots.length
+      ? `${state.freeTimeSlots.length} open slot${state.freeTimeSlots.length === 1 ? '' : 's'} found`
+      : 'No open slots in that window.';
+    renderAll();
+  } catch (error) {
+    state.freeTimeSlots = [];
+    state.freeTimeResultsOpen = false;
+    state.freeTimeStatus = error.message || 'Free-time search failed.';
+    renderAll();
+  }
+}
+
+async function handleShareFreeTime(target) {
+  const text = buildFreeTimeShareText(target);
+  if (!text) return;
+
+  if (navigator.share) {
+    try {
+      await navigator.share({ title: 'Free time options', text });
+      return;
+    } catch (error) {
+      if (error.name === 'AbortError') return;
+    }
+  }
+
+  const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(text)}`;
+  const opened = window.open(whatsappUrl, '_blank', 'noopener,noreferrer');
+  if (opened) {
+    showToast('Opening WhatsApp share.');
+    return;
+  }
+
+  try {
+    await navigator.clipboard.writeText(text);
+    showToast('Free-time options copied.');
+  } catch {
+    showToast('Could not open sharing.');
+  }
+}
+
+function buildFreeTimeShareText(target) {
+  const slots =
+    target === 'all'
+      ? state.freeTimeSlots.slice(0, 5)
+      : state.freeTimeSlots.filter((slot) => slot.id === target);
+  if (!slots.length) return '';
+  const duration = state.freeTimeQuery?.durationMinutes || 60;
+  return [
+    `Free time options (${duration} min):`,
+    ...slots.map((slot) => {
+      const start = new Date(slot.starts_at);
+      const end = new Date(slot.ends_at);
+      const date = start.toLocaleDateString(undefined, {
+        weekday: 'short',
+        month: 'short',
+        day: 'numeric',
+      });
+      const time = `${formatShareClock(start)}-${formatShareClock(end)}`;
+      return `${date}, ${time}`;
+    }),
+  ].join('\n');
+}
+
+function formatShareClock(date) {
+  return date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
 }
 
 async function setupRealtime() {

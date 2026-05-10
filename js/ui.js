@@ -31,6 +31,8 @@ import {
 } from './store.js';
 
 const els = {};
+const FREE_TIME_PREF_KEY = 'kalender-free-time-settings-v1';
+let freeTimePreferencesLoaded = false;
 
 export function bindElements() {
   [
@@ -49,6 +51,13 @@ export function bindElements() {
     'category-filters',
     'weekly-overview',
     'event-search',
+    'free-time-form',
+    'free-time-date',
+    'free-time-end-date',
+    'free-time-duration',
+    'free-time-window-start',
+    'free-time-window-end',
+    'free-time-results',
     'theme-toggle',
     'logout-btn',
     'new-event-btn',
@@ -162,6 +171,7 @@ export function renderAll() {
   renderTags();
   renderQuickAddTemplates();
   renderTagFilters();
+  renderFreeTimeFinder();
   renderCalendar();
   renderWeeklyOverview();
   if (!els.eventModal.open) {
@@ -238,6 +248,166 @@ export function renderTagFilters() {
 // Settings → Tags. Grouped by calendar so the user can see at a glance which
 // tags belong where. Only calendars where the user can edit get an "Add"
 // affordance — viewers can read but not modify.
+export function readFreeTimeForm() {
+  ensureFreeTimeDefaults();
+  const startDate = new Date(`${els.freeTimeDate.value}T00:00:00`);
+  const endDate = new Date(`${els.freeTimeEndDate.value}T00:00:00`);
+  const durationMinutes = Number(els.freeTimeDuration.value);
+  const windowStartMinutes = parseTimeMinutes(els.freeTimeWindowStart.value);
+  const windowEndMinutes = parseTimeMinutes(els.freeTimeWindowEnd.value);
+  const days = daysInInclusiveRange(startDate, endDate);
+
+  if (Number.isNaN(startDate.getTime())) throw new Error('Pick a start date.');
+  if (Number.isNaN(endDate.getTime())) throw new Error('Pick an end date.');
+  if (endDate < startDate) throw new Error('End date must be after start date.');
+  if (!Number.isFinite(days) || days < 1 || days > 14) {
+    throw new Error('Pick a date range between 1 and 14 days.');
+  }
+  if (!Number.isFinite(durationMinutes) || durationMinutes < 15 || durationMinutes > 480) {
+    throw new Error('Pick a duration between 15 minutes and 8 hours.');
+  }
+  if (windowStartMinutes == null || windowEndMinutes == null) {
+    throw new Error('Pick a valid time window.');
+  }
+  if (windowEndMinutes <= windowStartMinutes) {
+    throw new Error('The end of the window must be after the start.');
+  }
+  if (windowEndMinutes - windowStartMinutes < durationMinutes) {
+    throw new Error('The time window is shorter than the meeting duration.');
+  }
+
+  persistFreeTimePreferences();
+
+  return {
+    startDate,
+    days,
+    durationMinutes,
+    windowStartMinutes,
+    windowEndMinutes,
+  };
+}
+
+export function persistFreeTimePreferences() {
+  if (!els.freeTimeWindowStart || !els.freeTimeWindowEnd) return;
+  try {
+    localStorage.setItem(
+      FREE_TIME_PREF_KEY,
+      JSON.stringify({
+        duration: els.freeTimeDuration?.value || '60',
+        windowStart: els.freeTimeWindowStart.value || '09:00',
+        windowEnd: els.freeTimeWindowEnd.value || '18:00',
+      }),
+    );
+  } catch (error) {
+    console.warn('[free-time] could not persist preferences', error);
+  }
+}
+
+export function renderFreeTimeFinder() {
+  if (!els.freeTimeResults) return;
+  ensureFreeTimeDefaults();
+  const slots = state.freeTimeSlots;
+  const status = state.freeTimeStatus || 'Find open slots across your visible calendars.';
+
+  if (!slots.length) {
+    els.freeTimeResults.innerHTML = `<p class="empty-note">${escapeHtml(status)}</p>`;
+    return;
+  }
+
+  els.freeTimeResults.innerHTML = `
+    <details class="free-time-results-panel" ${state.freeTimeResultsOpen ? 'open' : ''}>
+      <summary data-free-time-results-summary>
+        <span>Results</span>
+        <strong>${slots.length}</strong>
+      </summary>
+      <div class="free-time-results-panel-body">
+        <div class="free-time-result-head">
+          <span>${escapeHtml(status)}</span>
+          <button class="ghost-action free-time-share-all" type="button" data-share-free-time="all">
+            Share all
+          </button>
+        </div>
+        ${slots
+          .map(
+            (slot) => `
+              <article class="free-time-slot">
+                <div>
+                  <strong>${escapeHtml(formatSlotDate(slot))}</strong>
+                  <span>${escapeHtml(formatSlotTime(slot))}</span>
+                </div>
+                <button class="free-time-share" type="button" data-share-free-time="${slot.id}">
+                  Share
+                </button>
+              </article>
+            `,
+          )
+          .join('')}
+      </div>
+    </details>
+  `;
+}
+
+function ensureFreeTimeDefaults() {
+  if (!els.freeTimeDate) return;
+  if (!freeTimePreferencesLoaded) {
+    try {
+      const prefs = JSON.parse(localStorage.getItem(FREE_TIME_PREF_KEY) || '{}');
+      if (prefs.duration && els.freeTimeDuration) els.freeTimeDuration.value = prefs.duration;
+      if (prefs.windowStart && els.freeTimeWindowStart) {
+        els.freeTimeWindowStart.value = prefs.windowStart;
+      }
+      if (prefs.windowEnd && els.freeTimeWindowEnd) {
+        els.freeTimeWindowEnd.value = prefs.windowEnd;
+      }
+    } catch (error) {
+      console.warn('[free-time] could not load preferences', error);
+    }
+    freeTimePreferencesLoaded = true;
+  }
+  if (!els.freeTimeDate.value) {
+    els.freeTimeDate.value = dateKey(new Date());
+  }
+  if (!els.freeTimeEndDate.value) {
+    els.freeTimeEndDate.value = dateKey(addDays(new Date(), 7));
+  }
+  if (!els.freeTimeWindowStart.value) els.freeTimeWindowStart.value = '09:00';
+  if (!els.freeTimeWindowEnd.value) els.freeTimeWindowEnd.value = '18:00';
+}
+
+function daysInInclusiveRange(startDate, endDate) {
+  if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) return NaN;
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  start.setHours(0, 0, 0, 0);
+  end.setHours(0, 0, 0, 0);
+  return Math.round((end - start) / 86400000) + 1;
+}
+
+function parseTimeMinutes(value) {
+  const match = String(value || '').match(/^(\d{2}):(\d{2})$/);
+  if (!match) return null;
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+  if (hour > 23 || minute > 59) return null;
+  return hour * 60 + minute;
+}
+
+function formatSlotDate(slot) {
+  return new Date(slot.starts_at).toLocaleDateString(undefined, {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+  });
+}
+
+function formatSlotTime(slot) {
+  return `${formatClock(new Date(slot.starts_at))} - ${formatClock(new Date(slot.ends_at))}`;
+}
+
+function formatClock(date) {
+  return date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+}
+
 export function renderTags() {
   els.tagList.innerHTML = '';
   const editableCalendars = state.calendars.filter(
