@@ -251,6 +251,55 @@ export async function createQuickAddTemplate(payload) {
   return data;
 }
 
+export async function fetchProfile(user) {
+  if (!user?.id) return null;
+  let { data, error } = await supabase
+    .from('profiles')
+    .select('id, email, display_name')
+    .eq('id', user.id)
+    .maybeSingle();
+
+  if (isMissingProfileDisplayNameColumn(error)) {
+    ({ data, error } = await supabase
+      .from('profiles')
+      .select('id, email')
+      .eq('id', user.id)
+      .maybeSingle());
+    if (error) throw error;
+    return {
+      id: user.id,
+      email: data?.email || user.email || '',
+      display_name: null,
+      missingDisplayName: true,
+    };
+  }
+
+  if (error) throw error;
+  return normalizeProfile({
+    id: user.id,
+    email: data?.email || user.email || '',
+    display_name: data?.display_name || null,
+    missingDisplayName: false,
+  });
+}
+
+export async function updateProfileDisplayName(displayName) {
+  const { data, error } = await supabase.rpc('set_profile_display_name', {
+    display_name: displayName?.trim() || null,
+  });
+
+  if (error) {
+    if (
+      isMissingProfileDisplayNameColumn(error) ||
+      /set_profile_display_name|function/i.test(error.message || '')
+    ) {
+      throw missingProfileDisplayNameMigrationError();
+    }
+    throw error;
+  }
+  return normalizeProfile(data);
+}
+
 export async function updateQuickAddTemplate(id, payload) {
   let { data, error } = await supabase
     .from('quick_add_templates')
@@ -312,10 +361,13 @@ async function withCreatorProfiles(events) {
       target_event_ids: eventIds,
     });
     if (error) throw error;
-    const emailById = new Map((data || []).map((profile) => [profile.id, profile.email]));
+    const profileById = new Map((data || []).map((profile) => [profile.id, profile]));
     return events.map((event) => ({
       ...event,
-      creator_email: event.created_by ? emailById.get(event.created_by) || null : null,
+      creator_email: event.created_by ? profileById.get(event.created_by)?.email || null : null,
+      creator_display_name: event.created_by
+        ? profileById.get(event.created_by)?.display_name || null
+        : null,
     }));
   } catch (error) {
     if (!/event_creator_profiles|function/i.test(error.message || '')) {
@@ -334,8 +386,26 @@ function uniqueRowsById(rows) {
   return [...byId.values()];
 }
 
+function normalizeProfile(profile) {
+  const row = Array.isArray(profile) ? profile[0] : profile;
+  if (!row) return null;
+  return {
+    ...row,
+    display_name: row.display_name || null,
+    missingDisplayName: Boolean(row.missingDisplayName),
+  };
+}
+
 function isMissingQuickAddStartColumn(error) {
   return Boolean(error && /default_start_time|column/i.test(error.message || ''));
+}
+
+function isMissingProfileDisplayNameColumn(error) {
+  return Boolean(error && /display_name|column/i.test(error.message || ''));
+}
+
+function isMissingSharedWithAllColumn(error) {
+  return Boolean(error && /shared_with_all|column/i.test(error.message || ''));
 }
 
 function withoutQuickAddStartTime(payload) {
@@ -343,10 +413,23 @@ function withoutQuickAddStartTime(payload) {
   return rest;
 }
 
+function withoutSharedWithAll(payload) {
+  const { shared_with_all, ...rest } = payload;
+  return rest;
+}
+
 function missingQuickAddStartMigrationError() {
   return new Error(
     'Run supabase/2026-05-quick-add-start-and-event-creators.sql to enable Custom Quick Add start times.',
   );
+}
+
+function missingProfileDisplayNameMigrationError() {
+  return new Error('Run supabase/2026-05-profile-display-names.sql to enable nicknames.');
+}
+
+function missingSharedWithAllMigrationError() {
+  return new Error('Run supabase/2026-05-shared-events.sql to enable shared collaborator events.');
 }
 
 export async function saveEvent(event) {
@@ -360,24 +443,34 @@ export async function saveEvent(event) {
     tag_id: event.tag_id,
     reminder_minutes: event.reminder_minutes,
     completed: Boolean(event.completed),
+    shared_with_all: Boolean(event.shared_with_all),
   };
 
   if (event.id) {
-    const { data, error } = await withTimeout(
-      supabase.from('events').update(payload).eq('id', event.id).select().single(),
-      'Save',
-    );
+    let { data, error } = await withTimeout(saveEventQuery(payload, event.id), 'Save');
+    if (isMissingSharedWithAllColumn(error)) {
+      if (event.shared_with_all) throw missingSharedWithAllMigrationError();
+      ({ data, error } = await withTimeout(saveEventQuery(withoutSharedWithAll(payload), event.id), 'Save'));
+    }
     if (error) throw error;
     return data;
   }
 
-  const { data, error } = await withTimeout(
-    supabase.from('events').insert(payload).select().single(),
-    'Save',
-  );
+  let { data, error } = await withTimeout(saveEventQuery(payload), 'Save');
+  if (isMissingSharedWithAllColumn(error)) {
+    if (event.shared_with_all) throw missingSharedWithAllMigrationError();
+    ({ data, error } = await withTimeout(saveEventQuery(withoutSharedWithAll(payload)), 'Save'));
+  }
 
   if (error) throw error;
   return data;
+}
+
+function saveEventQuery(payload, id = null) {
+  const query = id
+    ? supabase.from('events').update(payload).eq('id', id)
+    : supabase.from('events').insert(payload);
+  return query.select().single();
 }
 
 export async function deleteEvent(id) {

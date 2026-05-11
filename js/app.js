@@ -9,6 +9,7 @@ import {
   deleteTag,
   fetchCalendars,
   fetchEvents,
+  fetchProfile,
   fetchQuickAddTemplates,
   fetchTags,
   getSession,
@@ -25,6 +26,7 @@ import {
   signOut,
   subscribeToWorkspace,
   updateCalendarArchive,
+  updateProfileDisplayName,
   updateQuickAddTemplate,
   updateTag,
 } from './api.js';
@@ -40,7 +42,6 @@ import {
 import {
   canEditCalendar,
   defaultTagFor,
-  findFreeTimeSlots,
   findTag,
   isTaskEvent,
   state,
@@ -57,16 +58,13 @@ import {
   openCalendarModal,
   openDayDetail,
   openEventModal,
-  openFreeTimeResultsModal,
   openQuickAddTemplateModal,
   openShareModal,
   openTagDeleteModal,
   openTagModal,
   openTypePicker,
   populateQuickAddTemplateTagOptions,
-  persistFreeTimePreferences,
   readEventForm,
-  readFreeTimeForm,
   readQuickAddTemplateForm,
   readTagForm,
   renderAll,
@@ -163,6 +161,7 @@ async function boot() {
       state.events = [];
       state.tags = [];
       state.quickAddTemplates = [];
+      state.profile = null;
       renderUser();
       await removeChannel(state.realtimeChannel);
       state.realtimeChannel = null;
@@ -193,7 +192,26 @@ function bindUiEvents() {
   els.logoutBtn.addEventListener('click', signOut);
   els.themeToggle.addEventListener('click', toggleTheme);
   els.newCalendarBtn.addEventListener('click', openCalendarModal);
-  els.newTagBtn.addEventListener('click', () => openTagModal(null, state.activeCalendarId));
+  if (els.newTagBtn) {
+    els.newTagBtn.addEventListener('click', () => openTagModal(null, state.activeCalendarId));
+  }
+  if (els.profileForm) {
+    els.profileForm.addEventListener('submit', handleProfileSubmit);
+  }
+  if (els.profileEditBtn && els.profileForm) {
+    els.profileEditBtn.addEventListener('click', () => {
+      els.profileForm.hidden = false;
+      els.profileEditBtn.hidden = true;
+      els.profileDisplayName?.focus();
+    });
+  }
+  if (els.profileCancelBtn && els.profileForm) {
+    els.profileCancelBtn.addEventListener('click', () => {
+      els.profileForm.hidden = true;
+      if (els.profileEditBtn) els.profileEditBtn.hidden = false;
+      renderUser();
+    });
+  }
   els.prevBtn.addEventListener('click', () => movePeriod(-1));
   els.todayBtn.addEventListener('click', () => {
     state.selectedDate = new Date();
@@ -288,31 +306,6 @@ function bindUiEvents() {
     });
   });
 
-  if (els.freeTimeForm) {
-    els.freeTimeForm.addEventListener('submit', handleFindFreeTime);
-    els.freeTimeForm.addEventListener('input', persistFreeTimePreferences);
-    els.freeTimeForm.addEventListener('change', persistFreeTimePreferences);
-  }
-  if (els.freeTimeConfigToggle && els.freeTimeConfig) {
-    els.freeTimeConfigToggle.addEventListener('click', () => {
-      const nextExpanded = els.freeTimeConfig.hidden;
-      els.freeTimeConfig.hidden = !nextExpanded;
-      els.freeTimeConfigToggle.setAttribute('aria-expanded', String(nextExpanded));
-    });
-  }
-  if (els.freeTimeResults) {
-    els.freeTimeResults.addEventListener('click', (event) => {
-      const shareButton = event.target.closest('[data-share-free-time]');
-      if (!shareButton) return;
-      handleShareFreeTime(shareButton.dataset.shareFreeTime);
-    });
-  }
-  if (els.freeTimeResultsModal) {
-    els.freeTimeResultsModal.addEventListener('close', () => {
-      state.freeTimeResultsOpen = false;
-    });
-  }
-
   if (els.archivedToggle) {
     els.archivedToggle.addEventListener('change', async () => {
       state.showArchivedCalendars = els.archivedToggle.checked;
@@ -384,6 +377,8 @@ function bindUiEvents() {
     // Per-calendar "+ Add tag" affordance on the group header.
     const addBtn = event.target.closest('[data-tag-add-calendar-id]');
     if (addBtn) {
+      event.preventDefault();
+      event.stopPropagation();
       openTagModal(null, addBtn.dataset.tagAddCalendarId);
       return;
     }
@@ -528,11 +523,14 @@ function bindUiEvents() {
 
 async function loadWorkspace() {
   renderUser();
-  const [calendars, tags, templates] = await Promise.all([
+  const [profile, calendars, tags, templates] = await Promise.all([
+    loadProfileSafely(),
     loadCalendarsSafely(),
     loadTagsSafely(),
     loadQuickAddTemplatesSafely(),
   ]);
+  state.profile = profile;
+  renderUser();
   state.calendars = uniqueById(calendars);
   state.tags = uniqueById(tags);
   state.quickAddTemplates = uniqueById(templates);
@@ -541,6 +539,19 @@ async function loadWorkspace() {
   setActivePanel('calendar');
   await setupRealtime();
   await refreshEventsAndRender();
+}
+
+async function loadProfileSafely() {
+  try {
+    return await fetchProfile(state.session?.user);
+  } catch (error) {
+    console.warn('[profile] fetch failed', error);
+    return {
+      id: state.session?.user?.id || null,
+      email: state.session?.user?.email || '',
+      display_name: null,
+    };
+  }
 }
 
 async function loadCalendarsSafely() {
@@ -574,6 +585,25 @@ async function loadQuickAddTemplatesSafely() {
   } catch (error) {
     showToast('Quick-add templates could not be loaded.');
     return [];
+  }
+}
+
+async function handleProfileSubmit(event) {
+  event.preventDefault();
+  if (els.profileMessage) els.profileMessage.textContent = '';
+
+  try {
+    state.profile = await updateProfileDisplayName(els.profileDisplayName.value);
+    els.profileForm.hidden = true;
+    if (els.profileEditBtn) els.profileEditBtn.hidden = false;
+    renderUser();
+    renderMonthEntryScopeToggle();
+    renderCalendar();
+    showToast('Nickname saved.');
+  } catch (error) {
+    if (els.profileMessage) {
+      els.profileMessage.textContent = error.message || 'Could not save nickname.';
+    }
   }
 }
 
@@ -626,117 +656,6 @@ async function loadFocusEvents() {
   } catch (error) {
     showToast(error.message || 'Focus items could not be loaded.');
   }
-}
-
-async function handleFindFreeTime(event) {
-  event.preventDefault();
-  let query;
-  try {
-    query = readFreeTimeForm();
-  } catch (error) {
-    state.freeTimeSlots = [];
-    state.freeTimeResultsOpen = true;
-    state.freeTimeStatus = error.message || 'Could not read free-time settings.';
-    renderAll();
-    openFreeTimeResultsModal();
-    return;
-  }
-
-  const calendarIds = state.calendars
-    .filter((calendar) => !calendar.archived_at || state.showArchivedCalendars)
-    .map((calendar) => calendar.id);
-  if (!calendarIds.length) {
-    state.freeTimeSlots = [];
-    state.freeTimeResultsOpen = true;
-    state.freeTimeStatus = 'No visible calendars to check.';
-    renderAll();
-    openFreeTimeResultsModal();
-    return;
-  }
-
-  state.freeTimeSlots = [];
-  state.freeTimeResultsOpen = true;
-  state.freeTimeQuery = { ...query, calendarCount: calendarIds.length };
-  state.freeTimeStatus = `Checking ${calendarIds.length} calendar${calendarIds.length === 1 ? '' : 's'}...`;
-  renderAll();
-  openFreeTimeResultsModal();
-
-  const rangeStart = startOfDay(query.startDate);
-  const rangeEnd = addDays(rangeStart, query.days);
-
-  try {
-    const events = await fetchEvents(calendarIds, rangeStart, rangeEnd);
-    state.events = uniqueById([...events, ...state.events]);
-    state.freeTimeSlots = findFreeTimeSlots(events, {
-      ...query,
-      calendarCount: calendarIds.length,
-    });
-    state.freeTimeResultsOpen = true;
-    state.freeTimeStatus = state.freeTimeSlots.length
-      ? `${state.freeTimeSlots.length} open slot${state.freeTimeSlots.length === 1 ? '' : 's'} found`
-      : 'No open slots in that window.';
-    renderAll();
-  } catch (error) {
-    state.freeTimeSlots = [];
-    state.freeTimeResultsOpen = true;
-    state.freeTimeStatus = error.message || 'Free-time search failed.';
-    renderAll();
-  }
-}
-
-async function handleShareFreeTime(target) {
-  const text = buildFreeTimeShareText(target);
-  if (!text) return;
-
-  if (navigator.share) {
-    try {
-      await navigator.share({ title: 'Free time options', text });
-      return;
-    } catch (error) {
-      if (error.name === 'AbortError') return;
-    }
-  }
-
-  const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(text)}`;
-  const opened = window.open(whatsappUrl, '_blank', 'noopener,noreferrer');
-  if (opened) {
-    showToast('Opening WhatsApp share.');
-    return;
-  }
-
-  try {
-    await navigator.clipboard.writeText(text);
-    showToast('Free-time options copied.');
-  } catch {
-    showToast('Could not open sharing.');
-  }
-}
-
-function buildFreeTimeShareText(target) {
-  const slots =
-    target === 'all'
-      ? state.freeTimeSlots.slice(0, 5)
-      : state.freeTimeSlots.filter((slot) => slot.id === target);
-  if (!slots.length) return '';
-  const duration = state.freeTimeQuery?.durationMinutes || 60;
-  return [
-    `Free time options (${duration} min):`,
-    ...slots.map((slot) => {
-      const start = new Date(slot.starts_at);
-      const end = new Date(slot.ends_at);
-      const date = start.toLocaleDateString(undefined, {
-        weekday: 'short',
-        month: 'short',
-        day: 'numeric',
-      });
-      const time = `${formatShareClock(start)}-${formatShareClock(end)}`;
-      return `${date}, ${time}`;
-    }),
-  ].join('\n');
-}
-
-function formatShareClock(date) {
-  return date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
 }
 
 async function setupRealtime() {

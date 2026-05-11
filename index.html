@@ -102,59 +102,6 @@
               </summary>
               <div id="category-filters" class="category-filters"></div>
             </details>
-            <section class="side-section free-time-section">
-              <div class="section-heading free-time-heading">
-                <div class="free-time-title-actions">
-                  <h2>Free Time</h2>
-                  <button
-                    id="free-time-config-toggle"
-                    class="free-time-config-toggle"
-                    type="button"
-                    aria-controls="free-time-config"
-                    aria-expanded="false"
-                  >
-                    Config
-                  </button>
-                </div>
-                <button class="free-time-find-button" type="submit" form="free-time-form">
-                  Find slots
-                </button>
-              </div>
-              <form id="free-time-form" class="free-time-card">
-                <div id="free-time-config" class="free-time-config" hidden>
-                  <div class="free-time-grid">
-                    <label>
-                      From date
-                      <input id="free-time-date" type="date" />
-                    </label>
-                    <label>
-                      To date
-                      <input id="free-time-end-date" type="date" />
-                    </label>
-                    <label>
-                      Duration
-                      <select id="free-time-duration">
-                        <option value="30">30 min</option>
-                        <option value="45">45 min</option>
-                        <option value="60" selected>60 min</option>
-                        <option value="90">90 min</option>
-                        <option value="120">120 min</option>
-                      </select>
-                    </label>
-                    <div class="free-time-window">
-                      <label>
-                        From
-                        <input id="free-time-window-start" type="time" value="09:00" />
-                      </label>
-                      <label>
-                        To
-                        <input id="free-time-window-end" type="time" value="18:00" />
-                      </label>
-                    </div>
-                  </div>
-                </div>
-              </form>
-            </section>
             <section class="side-section overview-section">
               <div class="section-heading">
                 <h2 id="focus-overview-title">This week</h2>
@@ -179,6 +126,27 @@
             <section class="account-card" aria-label="Signed in account">
               <span>Signed in as</span>
               <strong id="account-email"></strong>
+              <div class="profile-display-row">
+                <span>Nickname</span>
+                <strong id="profile-nickname-value"></strong>
+                <button id="profile-edit-btn" class="ghost-action profile-edit-btn" type="button">
+                  Edit
+                </button>
+              </div>
+              <form id="profile-form" class="profile-form" hidden>
+                <label>
+                  <input
+                    id="profile-display-name"
+                    type="text"
+                    maxlength="32"
+                    autocomplete="nickname"
+                    placeholder="Add nickname"
+                  />
+                </label>
+                <button class="ghost-action" type="submit">Save</button>
+                <button id="profile-cancel-btn" class="ghost-action" type="button">Cancel</button>
+                <p id="profile-message" class="form-message" role="status"></p>
+              </form>
             </section>
             <section class="side-section">
               <div class="section-heading">
@@ -196,9 +164,6 @@
             <section class="side-section tags-section">
               <div class="section-heading">
                 <h2>Tags</h2>
-                <button id="new-tag-btn" class="icon-button" type="button" title="Create tag">
-                  +
-                </button>
               </div>
               <div id="tag-list" class="tag-list"></div>
             </section>
@@ -288,6 +253,10 @@
             Calendar
             <select id="event-calendar" required></select>
           </label>
+          <label id="event-shared-with-all-row" class="checkbox-row">
+            <input id="event-shared-with-all" type="checkbox" />
+            <span>Show in every collaborator's Mine view</span>
+          </label>
           <label>
             Notes
             <textarea id="event-description" rows="2"></textarea>
@@ -327,23 +296,6 @@
           <span>Something to get done that day</span>
         </button>
       </div>
-    </dialog>
-
-    <dialog
-      id="free-time-results-modal"
-      class="modal free-time-results-modal"
-      aria-labelledby="free-time-results-title"
-    >
-      <div class="modal-header">
-        <div>
-          <p class="eyebrow">Free Time</p>
-          <h2 id="free-time-results-title">Open slots</h2>
-        </div>
-        <button class="icon-button" type="button" data-close-modal aria-label="Close free time results">
-          x
-        </button>
-      </div>
-      <div id="free-time-results" class="free-time-results"></div>
     </dialog>
 
     <dialog id="calendar-modal" class="modal">

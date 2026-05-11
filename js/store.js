@@ -2,6 +2,7 @@ import { FALLBACK_TAG_COLOR, FALLBACK_TAG_NAME } from './config.js';
 
 export const state = {
   session: null,
+  profile: null,
   calendars: [],
   activeCalendarId: null,
   events: [],
@@ -16,10 +17,6 @@ export const state = {
   showArchivedCalendars: false,
   selectedTagIds: new Set(),
   realtimeChannel: null,
-  freeTimeSlots: [],
-  freeTimeStatus: 'Find open slots across your visible calendars.',
-  freeTimeQuery: null,
-  freeTimeResultsOpen: false,
 };
 
 const FALLBACK_TAG = Object.freeze({
@@ -96,10 +93,14 @@ export function isTaskEvent(event) {
 export function visibleMonthEvents() {
   const userId = state.session?.user?.id;
   if (state.monthEntryScope === 'mine') {
-    return visibleEvents().filter((event) => userId && event.created_by === userId);
+    return visibleEvents().filter(
+      (event) => event.shared_with_all || (userId && event.created_by === userId),
+    );
   }
   if (state.monthEntryScope === 'others') {
-    return visibleEvents().filter((event) => userId && event.created_by && event.created_by !== userId);
+    return visibleEvents().filter(
+      (event) => !event.shared_with_all && userId && event.created_by && event.created_by !== userId,
+    );
   }
   return visibleEvents();
 }
@@ -129,109 +130,6 @@ export function isArchivedFocusEvent(event, referenceDate = new Date()) {
     return Boolean(event.completed && new Date(event.starts_at) < weekStart);
   }
   return new Date(event.ends_at) < referenceDate;
-}
-
-export function findFreeTimeSlots(events, options) {
-  const {
-    startDate,
-    days,
-    durationMinutes,
-    windowStartMinutes,
-    windowEndMinutes,
-    maxSlots = Infinity,
-    maxSlotsPerDay = 3,
-    preferredStartMinutes = 13 * 60,
-    preferredEndMinutes = 18 * 60,
-    stepMinutes = 30,
-  } = options;
-
-  const durationMs = durationMinutes * 60 * 1000;
-  const stepMs = stepMinutes * 60 * 1000;
-  const slots = [];
-
-  for (let dayIndex = 0; dayIndex < days && slots.length < maxSlots; dayIndex += 1) {
-    const day = addLocalDays(startOfLocalDay(startDate), dayIndex);
-    const windowStart = dateAtMinutes(day, windowStartMinutes);
-    const windowEnd = dateAtMinutes(day, windowEndMinutes);
-    const daySlots = [];
-    const busy = events
-      .filter((event) => !event.completed)
-      .map((event) => ({
-        start: new Date(event.starts_at),
-        end: new Date(event.ends_at),
-      }))
-      .filter((event) => event.start < windowEnd && event.end > windowStart)
-      .map((event) => ({
-        start: new Date(Math.max(event.start.getTime(), windowStart.getTime())),
-        end: new Date(Math.min(event.end.getTime(), windowEnd.getTime())),
-      }))
-      .sort((a, b) => a.start - b.start);
-
-    const merged = [];
-    busy.forEach((event) => {
-      const last = merged[merged.length - 1];
-      if (!last || event.start > last.end) {
-        merged.push({ ...event });
-      } else if (event.end > last.end) {
-        last.end = event.end;
-      }
-    });
-
-    let cursor = new Date(windowStart);
-    [...merged, { start: windowEnd, end: windowEnd }].forEach((block) => {
-      while (block.start.getTime() - cursor.getTime() >= durationMs) {
-        const start = new Date(cursor);
-        const end = new Date(start.getTime() + durationMs);
-        daySlots.push({
-          id: `slot-${start.getTime()}`,
-          starts_at: start.toISOString(),
-          ends_at: end.toISOString(),
-          calendar_count: options.calendarCount || 0,
-        });
-        cursor = new Date(cursor.getTime() + stepMs);
-      }
-      if (block.end > cursor) cursor = new Date(block.end);
-    });
-
-    rankFreeTimeDaySlots(daySlots, preferredStartMinutes, preferredEndMinutes)
-      .slice(0, maxSlotsPerDay)
-      .forEach((slot) => {
-        if (slots.length < maxSlots) slots.push(slot);
-      });
-  }
-
-  return slots;
-}
-
-function rankFreeTimeDaySlots(slots, preferredStartMinutes, preferredEndMinutes) {
-  return [...slots].sort((a, b) => {
-    const aPreferred = isPreferredFreeTimeSlot(a, preferredStartMinutes, preferredEndMinutes);
-    const bPreferred = isPreferredFreeTimeSlot(b, preferredStartMinutes, preferredEndMinutes);
-    if (aPreferred !== bPreferred) return aPreferred ? -1 : 1;
-    return new Date(a.starts_at) - new Date(b.starts_at);
-  });
-}
-
-function isPreferredFreeTimeSlot(slot, preferredStartMinutes, preferredEndMinutes) {
-  const start = minutesFromLocalMidnight(new Date(slot.starts_at));
-  const end = minutesFromLocalMidnight(new Date(slot.ends_at));
-  return start >= preferredStartMinutes && end <= preferredEndMinutes;
-}
-
-function minutesFromLocalMidnight(date) {
-  return date.getHours() * 60 + date.getMinutes();
-}
-
-function startOfLocalDay(date) {
-  const next = new Date(date);
-  next.setHours(0, 0, 0, 0);
-  return next;
-}
-
-function dateAtMinutes(date, minutes) {
-  const next = startOfLocalDay(date);
-  next.setMinutes(minutes);
-  return next;
 }
 
 function startOfLocalWeek(date) {

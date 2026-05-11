@@ -7,7 +7,6 @@ import {
   canEditCalendar,
   defaultTagFor,
   eventTag,
-  findFreeTimeSlots,
   findQuickAddTemplateByShortcut,
   findTag,
   state,
@@ -221,11 +220,39 @@ test('visibleMonthEvents - mine scope only shows entries created by the signed-i
   assert.deepEqual(visibleMonthEvents().map((e) => e.id), ['e1']);
 });
 
+test('visibleMonthEvents - mine scope includes shared-with-all collaborator events', () => {
+  state.events = [
+    { id: 'e1', calendar_id: 'cal-a', title: 'Mine', description: '', tag_id: tagA1.id, created_by: 'user-me' },
+    {
+      id: 'e2',
+      calendar_id: 'cal-a',
+      title: 'Shared',
+      description: '',
+      tag_id: tagA1.id,
+      created_by: 'user-other',
+      shared_with_all: true,
+    },
+    { id: 'e3', calendar_id: 'cal-a', title: 'Other', description: '', tag_id: tagA1.id, created_by: 'user-other' },
+  ];
+  state.monthEntryScope = 'mine';
+  syncSelectedTags();
+  assert.deepEqual(visibleMonthEvents().map((e) => e.id), ['e1', 'e2']);
+});
+
 test('visibleMonthEvents - others scope only shows collaborator entries with a known creator', () => {
   state.events = [
     { id: 'e1', calendar_id: 'cal-a', title: 'Mine', description: '', tag_id: tagA1.id, created_by: 'user-me' },
     { id: 'e2', calendar_id: 'cal-a', title: 'Other', description: '', tag_id: tagA1.id, created_by: 'user-other' },
     { id: 'e3', calendar_id: 'cal-a', title: 'Unknown', description: '', tag_id: tagA1.id, created_by: null },
+    {
+      id: 'e4',
+      calendar_id: 'cal-a',
+      title: 'Shared',
+      description: '',
+      tag_id: tagA1.id,
+      created_by: 'user-other',
+      shared_with_all: true,
+    },
   ];
   state.monthEntryScope = 'others';
   syncSelectedTags();
@@ -306,91 +333,4 @@ test('visibleFocusArchiveEvents contains past events and old completed tasks', (
     visibleFocusArchiveEvents(now).map((e) => e.id).sort(),
     ['old-done-task', 'past-event'].sort(),
   );
-});
-
-test('findFreeTimeSlots returns gaps across busy events', () => {
-  const slots = findFreeTimeSlots(
-    [
-      {
-        id: 'busy-1',
-        starts_at: '2026-05-11T09:30:00',
-        ends_at: '2026-05-11T10:30:00',
-      },
-      {
-        id: 'busy-2',
-        starts_at: '2026-05-11T12:00:00',
-        ends_at: '2026-05-11T13:00:00',
-      },
-    ],
-    {
-      startDate: new Date('2026-05-11T00:00:00'),
-      days: 1,
-      durationMinutes: 60,
-      windowStartMinutes: 9 * 60,
-      windowEndMinutes: 14 * 60,
-      maxSlots: 4,
-      stepMinutes: 30,
-    },
-  );
-
-  assert.deepEqual(
-    slots.map((slot) => [new Date(slot.starts_at).getHours(), new Date(slot.starts_at).getMinutes()]),
-    [
-      [13, 0],
-      [10, 30],
-      [11, 0],
-    ],
-  );
-});
-
-test('findFreeTimeSlots limits each day to three slots and prefers 13-18', () => {
-  const slots = findFreeTimeSlots([], {
-    startDate: new Date('2026-05-11T00:00:00'),
-    days: 2,
-    durationMinutes: 60,
-    windowStartMinutes: 9 * 60,
-    windowEndMinutes: 19 * 60,
-    stepMinutes: 60,
-  });
-
-  assert.equal(slots.length, 6);
-  assert.deepEqual(
-    slots.map((slot) => [
-      new Date(slot.starts_at).getDate(),
-      new Date(slot.starts_at).getHours(),
-    ]),
-    [
-      [11, 13],
-      [11, 14],
-      [11, 15],
-      [12, 13],
-      [12, 14],
-      [12, 15],
-    ],
-  );
-});
-
-test('findFreeTimeSlots ignores completed busy items', () => {
-  const slots = findFreeTimeSlots(
-    [
-      {
-        id: 'done',
-        starts_at: '2026-05-11T09:00:00',
-        ends_at: '2026-05-11T10:00:00',
-        completed: true,
-      },
-    ],
-    {
-      startDate: new Date('2026-05-11T00:00:00'),
-      days: 1,
-      durationMinutes: 60,
-      windowStartMinutes: 9 * 60,
-      windowEndMinutes: 11 * 60,
-      maxSlots: 2,
-      stepMinutes: 30,
-    },
-  );
-
-  assert.equal(slots.length, 2);
-  assert.equal(new Date(slots[0].starts_at).getHours(), 9);
 });

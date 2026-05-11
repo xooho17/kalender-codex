@@ -31,8 +31,16 @@ import {
 } from './store.js';
 
 const els = {};
-const FREE_TIME_PREF_KEY = 'kalender-free-time-settings-v1';
-let freeTimePreferencesLoaded = false;
+const COLLABORATOR_COLORS = [
+  '#ef4444',
+  '#3b82f6',
+  '#22c55e',
+  '#f59e0b',
+  '#a855f7',
+  '#06b6d4',
+  '#f97316',
+  '#ec4899',
+];
 
 export function bindElements() {
   [
@@ -44,6 +52,12 @@ export function bindElements() {
     'password',
     'user-email',
     'account-email',
+    'profile-nickname-value',
+    'profile-edit-btn',
+    'profile-form',
+    'profile-display-name',
+    'profile-cancel-btn',
+    'profile-message',
     'calendar-list',
     'archived-toggle',
     'tag-filter-panel',
@@ -51,16 +65,6 @@ export function bindElements() {
     'category-filters',
     'weekly-overview',
     'event-search',
-    'free-time-form',
-    'free-time-config',
-    'free-time-config-toggle',
-    'free-time-date',
-    'free-time-end-date',
-    'free-time-duration',
-    'free-time-window-start',
-    'free-time-window-end',
-    'free-time-results-modal',
-    'free-time-results',
     'theme-toggle',
     'logout-btn',
     'new-event-btn',
@@ -78,6 +82,8 @@ export function bindElements() {
     'event-modal-title',
     'event-id',
     'event-calendar',
+    'event-shared-with-all',
+    'event-shared-with-all-row',
     'event-title',
     'event-description',
     'event-start',
@@ -165,8 +171,19 @@ export function setActivePanel(panelName) {
 
 export function renderUser() {
   const email = state.session?.user?.email || '';
+  const displayName = profileDisplayName() || email;
   els.userEmail.textContent = email;
-  if (els.accountEmail) els.accountEmail.textContent = email || 'Not signed in';
+  if (els.accountEmail) els.accountEmail.textContent = displayName || 'Not signed in';
+  if (els.profileNicknameValue) {
+    els.profileNicknameValue.textContent = profileDisplayName() || 'No nickname';
+    els.profileNicknameValue.classList.toggle('muted-value', !profileDisplayName());
+  }
+  if (els.profileDisplayName && document.activeElement !== els.profileDisplayName) {
+    els.profileDisplayName.value = state.profile?.display_name || '';
+  }
+  if (els.profileMessage && !state.profile?.missingDisplayName) {
+    els.profileMessage.textContent = '';
+  }
 }
 
 export function renderAll() {
@@ -174,7 +191,6 @@ export function renderAll() {
   renderTags();
   renderQuickAddTemplates();
   renderTagFilters();
-  renderFreeTimeFinder();
   renderCalendar();
   renderWeeklyOverview();
   if (!els.eventModal.open) {
@@ -251,167 +267,6 @@ export function renderTagFilters() {
 // Settings → Tags. Grouped by calendar so the user can see at a glance which
 // tags belong where. Only calendars where the user can edit get an "Add"
 // affordance — viewers can read but not modify.
-export function readFreeTimeForm() {
-  ensureFreeTimeDefaults();
-  const startDate = new Date(`${els.freeTimeDate.value}T00:00:00`);
-  const endDate = new Date(`${els.freeTimeEndDate.value}T00:00:00`);
-  const durationMinutes = Number(els.freeTimeDuration.value);
-  const windowStartMinutes = parseTimeMinutes(els.freeTimeWindowStart.value);
-  const windowEndMinutes = parseTimeMinutes(els.freeTimeWindowEnd.value);
-  const days = daysInInclusiveRange(startDate, endDate);
-
-  if (Number.isNaN(startDate.getTime())) throw new Error('Pick a start date.');
-  if (Number.isNaN(endDate.getTime())) throw new Error('Pick an end date.');
-  if (endDate < startDate) throw new Error('End date must be after start date.');
-  if (!Number.isFinite(days) || days < 1 || days > 14) {
-    throw new Error('Pick a date range between 1 and 14 days.');
-  }
-  if (!Number.isFinite(durationMinutes) || durationMinutes < 15 || durationMinutes > 480) {
-    throw new Error('Pick a duration between 15 minutes and 8 hours.');
-  }
-  if (windowStartMinutes == null || windowEndMinutes == null) {
-    throw new Error('Pick a valid time window.');
-  }
-  if (windowEndMinutes <= windowStartMinutes) {
-    throw new Error('The end of the window must be after the start.');
-  }
-  if (windowEndMinutes - windowStartMinutes < durationMinutes) {
-    throw new Error('The time window is shorter than the meeting duration.');
-  }
-
-  persistFreeTimePreferences();
-
-  return {
-    startDate,
-    days,
-    durationMinutes,
-    windowStartMinutes,
-    windowEndMinutes,
-  };
-}
-
-export function persistFreeTimePreferences() {
-  if (!els.freeTimeWindowStart || !els.freeTimeWindowEnd) return;
-  try {
-    localStorage.setItem(
-      FREE_TIME_PREF_KEY,
-      JSON.stringify({
-        duration: els.freeTimeDuration?.value || '60',
-        windowStart: els.freeTimeWindowStart.value || '09:00',
-        windowEnd: els.freeTimeWindowEnd.value || '18:00',
-      }),
-    );
-  } catch (error) {
-    console.warn('[free-time] could not persist preferences', error);
-  }
-}
-
-export function renderFreeTimeFinder() {
-  if (!els.freeTimeResults) return;
-  ensureFreeTimeDefaults();
-  const slots = state.freeTimeSlots;
-  const status = state.freeTimeStatus || 'Find open slots across your visible calendars.';
-
-  if (!slots.length) {
-    els.freeTimeResults.innerHTML = `<p class="empty-note">${escapeHtml(status)}</p>`;
-    return;
-  }
-
-  els.freeTimeResults.innerHTML = `
-    <div class="free-time-result-head">
-      <span>${escapeHtml(status)}</span>
-      <button class="ghost-action free-time-share-all" type="button" data-share-free-time="all">
-        Share all
-      </button>
-    </div>
-    <div class="free-time-slot-list">
-        ${slots
-          .map(
-            (slot) => `
-              <article class="free-time-slot">
-                <div>
-                  <strong>${escapeHtml(formatSlotDate(slot))}</strong>
-                  <span>${escapeHtml(formatSlotTime(slot))}</span>
-                </div>
-                <button class="free-time-share" type="button" data-share-free-time="${slot.id}">
-                  Share
-                </button>
-              </article>
-            `,
-          )
-          .join('')}
-    </div>
-  `;
-}
-
-export function openFreeTimeResultsModal() {
-  if (!els.freeTimeResultsModal) return;
-  if (!els.freeTimeResultsModal.open) {
-    els.freeTimeResultsModal.showModal();
-  }
-}
-
-function ensureFreeTimeDefaults() {
-  if (!els.freeTimeDate) return;
-  if (!freeTimePreferencesLoaded) {
-    try {
-      const prefs = JSON.parse(localStorage.getItem(FREE_TIME_PREF_KEY) || '{}');
-      if (prefs.duration && els.freeTimeDuration) els.freeTimeDuration.value = prefs.duration;
-      if (prefs.windowStart && els.freeTimeWindowStart) {
-        els.freeTimeWindowStart.value = prefs.windowStart;
-      }
-      if (prefs.windowEnd && els.freeTimeWindowEnd) {
-        els.freeTimeWindowEnd.value = prefs.windowEnd;
-      }
-    } catch (error) {
-      console.warn('[free-time] could not load preferences', error);
-    }
-    freeTimePreferencesLoaded = true;
-  }
-  if (!els.freeTimeDate.value) {
-    els.freeTimeDate.value = dateKey(new Date());
-  }
-  if (!els.freeTimeEndDate.value) {
-    els.freeTimeEndDate.value = dateKey(addDays(new Date(), 7));
-  }
-  if (!els.freeTimeWindowStart.value) els.freeTimeWindowStart.value = '09:00';
-  if (!els.freeTimeWindowEnd.value) els.freeTimeWindowEnd.value = '18:00';
-}
-
-function daysInInclusiveRange(startDate, endDate) {
-  if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) return NaN;
-  const start = new Date(startDate);
-  const end = new Date(endDate);
-  start.setHours(0, 0, 0, 0);
-  end.setHours(0, 0, 0, 0);
-  return Math.round((end - start) / 86400000) + 1;
-}
-
-function parseTimeMinutes(value) {
-  const match = String(value || '').match(/^(\d{2}):(\d{2})$/);
-  if (!match) return null;
-  const hour = Number(match[1]);
-  const minute = Number(match[2]);
-  if (hour > 23 || minute > 59) return null;
-  return hour * 60 + minute;
-}
-
-function formatSlotDate(slot) {
-  return new Date(slot.starts_at).toLocaleDateString(undefined, {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-  });
-}
-
-function formatSlotTime(slot) {
-  return `${formatClock(new Date(slot.starts_at))} - ${formatClock(new Date(slot.ends_at))}`;
-}
-
-function formatClock(date) {
-  return date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
-}
-
 export function renderTags() {
   els.tagList.innerHTML = '';
   const editableCalendars = state.calendars.filter(
@@ -433,30 +288,36 @@ export function renderTags() {
       const group = document.createElement('section');
       group.className = 'tag-group';
       const previewTags = calendarTags.slice(0, 5);
+      const addButton = editable
+        ? `<button
+            class="icon-button tag-group-add"
+            type="button"
+            data-tag-add-calendar-id="${calendar.id}"
+            title="Create tag"
+            aria-label="Create tag in ${escapeHtml(calendar.name)}"
+          >+</button>`
+        : '';
       group.innerHTML = `
         <details class="tag-group-details">
           <summary class="tag-group-summary">
             <span class="tag-group-title">
               <strong>${escapeHtml(calendar.name)}</strong>
-              <small>${calendarTags.length} tag${calendarTags.length === 1 ? '' : 's'}</small>
+              <span class="tag-group-meta">
+                <small>${calendarTags.length} tag${calendarTags.length === 1 ? '' : 's'}</small>
+                <span class="tag-preview" aria-hidden="true">
+                  ${previewTags
+                    .map(
+                      (tag) =>
+                        `<span class="tag-preview-dot" style="--tag-color:${safeColor(tag.color)}"></span>`,
+                    )
+                    .join('')}
+                </span>
+              </span>
             </span>
-            <span class="tag-preview" aria-hidden="true">
-              ${previewTags
-                .map(
-                  (tag) =>
-                    `<span class="tag-preview-dot" style="--tag-color:${safeColor(tag.color)}"></span>`,
-                )
-                .join('')}
-            </span>
+            ${addButton}
           </summary>
           <div class="tag-group-menu">
-            <div class="tag-group-actions">
-              ${
-                editable
-                  ? `<button class="ghost-action tag-group-add" type="button" data-tag-add-calendar-id="${calendar.id}">+ Add tag</button>`
-                  : '<span class="role-pill">view only</span>'
-              }
-            </div>
+            ${editable ? '' : '<div class="tag-group-actions"><span class="role-pill">view only</span></div>'}
             ${
               calendarTags.length
                 ? calendarTags
@@ -630,6 +491,7 @@ export function renderMonthEntryScopeToggle() {
   const meta = monthEntryScopeMeta(state.monthEntryScope);
   els.monthEntryScopeBtn.textContent = meta.label;
   els.monthEntryScopeBtn.setAttribute('aria-label', meta.ariaLabel);
+  els.monthEntryScopeBtn.title = meta.label;
   els.monthEntryScopeBtn.dataset.scope = state.monthEntryScope;
 }
 
@@ -766,6 +628,10 @@ export function openEventModal(event = null, date = null, draft = {}) {
   els.eventStart.value = toLocalInputValue(start);
   els.eventEnd.value = toLocalInputValue(end);
   els.eventForm.dataset.durationMinutes = String(Math.max(1, Math.round((end - start) / 60000)));
+  if (els.eventSharedWithAll) {
+    els.eventSharedWithAll.checked = Boolean(event?.shared_with_all);
+    els.eventSharedWithAllRow.hidden = Boolean(event);
+  }
 
   // Pick the right tag id: the event's actual tag, the draft's tag (only if
   // it's valid for the event's calendar), or the calendar's default Untagged.
@@ -811,6 +677,7 @@ export function readEventForm() {
     tag_id: tagId,
     reminder_minutes: els.eventReminder.checked ? 15 : null,
     completed: Boolean(existingEvent?.completed),
+    shared_with_all: Boolean(existingEvent?.shared_with_all || (!id && els.eventSharedWithAll?.checked)),
   };
 }
 
@@ -977,7 +844,7 @@ function renderMonth() {
           if (!entry) return '<span class="event-lane-spacer" aria-hidden="true"></span>';
           const event = entry.event;
           return `
-            <span class="event-pill ${eventPillClass(event, day)}" draggable="true" data-event-id="${event.id}" style="--event-color:${safeColor(eventColor(event))}">
+            <span class="event-pill ${eventPillClass(event, day)}" draggable="true" data-event-id="${event.id}" style="--event-color:${safeColor(monthEventColor(event))}">
               ${escapeHtml(event.title)}
             </span>
           `;
@@ -1024,12 +891,36 @@ function buildMonthEventLayout(days) {
 
 function monthEntryScopeMeta(scope) {
   if (scope === 'mine') {
-    return { label: 'Mine', ariaLabel: 'Show my entries in month view' };
+    const label = profileDisplayName() || 'Mine';
+    return { label, ariaLabel: `Show ${label}'s entries in month view` };
   }
   if (scope === 'others') {
-    return { label: 'Others', ariaLabel: 'Show collaborator entries in month view' };
+    const label = collaboratorScopeLabel();
+    return { label, ariaLabel: 'Show collaborator entries in month view' };
   }
   return { label: 'All', ariaLabel: 'Show all entries in month view' };
+}
+
+function profileDisplayName() {
+  return state.profile?.display_name?.trim() || '';
+}
+
+function collaboratorScopeLabel() {
+  const userId = state.session?.user?.id;
+  const names = uniqueById(
+    state.events
+      .filter((event) => event.created_by && event.created_by !== userId)
+      .map((event) => ({
+        id: event.created_by,
+        name: creatorDisplayName(event),
+      })),
+  )
+    .map((item) => item.name)
+    .filter(Boolean);
+
+  if (names.length === 1) return names[0];
+  if (names.length > 1) return 'Colabs';
+  return 'Colab';
 }
 
 function renderDayDetail(date) {
@@ -1296,15 +1187,37 @@ function eventColor(event) {
   return eventTag(event).color || FALLBACK_TAG_COLOR;
 }
 
+function monthEventColor(event) {
+  if (state.monthEntryScope !== 'all') return eventColor(event);
+  return collaboratorColor(event.created_by || 'unknown');
+}
+
+function collaboratorColor(creatorId) {
+  let hash = 0;
+  String(creatorId || 'unknown')
+    .split('')
+    .forEach((char) => {
+      hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
+    });
+  return COLLABORATOR_COLORS[hash % COLLABORATOR_COLORS.length];
+}
+
 function eventTagLabel(event) {
   return eventTag(event).name || FALLBACK_TAG_NAME;
 }
 
 function eventCreatorLabel(event) {
   if (!event.created_by) return '';
-  if (event.created_by === state.session?.user?.id) return ' - by you';
-  if (event.creator_email) return ` - by ${escapeHtml(event.creator_email.split('@')[0])}`;
+  if (event.created_by === state.session?.user?.id) {
+    return ` - by ${escapeHtml(profileDisplayName() || 'you')}`;
+  }
+  const creator = creatorDisplayName(event);
+  if (creator) return ` - by ${escapeHtml(creator)}`;
   return ' - by collaborator';
+}
+
+function creatorDisplayName(event) {
+  return event.creator_display_name?.trim() || event.creator_email?.split('@')[0] || '';
 }
 
 function eventPillClass(event, day) {
