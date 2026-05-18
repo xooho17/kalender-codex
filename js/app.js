@@ -49,6 +49,16 @@ import {
   uniqueById,
 } from './store.js';
 import {
+  applyQueuedEventMutations,
+  enqueueOfflineMutation,
+  isLocalEventId,
+  readOfflineQueue,
+  readOfflineWorkspace,
+  replaceQueuedEventId,
+  writeOfflineQueue,
+  writeOfflineWorkspace,
+} from './offlineStore.js';
+import {
   bindElements,
   closeDayDetail,
   closeTagDeleteModal,
@@ -83,7 +93,9 @@ const els = elements();
 let eventSaveInFlight = false;
 let eventDeleteInFlight = false;
 let resumeInFlight = false;
+let offlineSyncInFlight = false;
 let lastResumeAt = 0;
+let lastOfflineCacheToastAt = 0;
 let searchRenderTimer = 0;
 let refreshRequestId = 0;
 let tagDeleteInFlight = false;
@@ -128,6 +140,176 @@ async function withOptimisticUpdate({ apply, persist, success, errorMessage }) {
         : errorMessage ?? error.message ?? 'Something went wrong.';
     showToast(message);
     throw error;
+  }
+}
+
+function currentUserId() {
+  return state.session?.user?.id || null;
+}
+
+function cacheCurrentWorkspace() {
+  const userId = currentUserId();
+  if (!userId) return;
+  writeOfflineWorkspace(userId, {
+    profile: state.profile,
+    calendars: state.calendars,
+    tags: state.tags,
+    quickAddTemplates: state.quickAddTemplates,
+    events: state.events,
+    activeCalendarId: state.activeCalendarId,
+  });
+}
+
+function cachedWorkspace() {
+  return readOfflineWorkspace(currentUserId());
+}
+
+function pendingOfflineQueue() {
+  return readOfflineQueue(currentUserId());
+}
+
+function eventsWithPendingOfflineChanges(events) {
+  return applyQueuedEventMutations(events, pendingOfflineQueue());
+}
+
+function showOfflineCacheToast(message = 'Offline. Showing saved calendar data.') {
+  const now = Date.now();
+  if (now - lastOfflineCacheToastAt < 4000) return;
+  lastOfflineCacheToastAt = now;
+  showToast(message);
+}
+
+function isOfflineNow() {
+  return typeof navigator !== 'undefined' && navigator.onLine === false;
+}
+
+function isConnectionError(error) {
+  if (isOfflineNow()) return true;
+  return /failed to fetch|network|internet|offline|timed out|timeout|load failed|err_internet/i.test(
+    error?.message || '',
+  );
+}
+
+function queueOfflineEventSave(event) {
+  const userId = currentUserId();
+  if (!userId) throw new Error('You need to be signed in before saving offline changes.');
+
+  const clientId = event.id || `offline-${Date.now()}`;
+  const queuedEvent = {
+    ...event,
+    id: clientId,
+    created_by: event.created_by || state.session?.user?.id || null,
+    updated_at: new Date().toISOString(),
+    __offlineQueued: true,
+  };
+  enqueueOfflineMutation(userId, {
+    type: 'saveEvent',
+    client_id: clientId,
+    event: queuedEvent,
+  });
+  state.events = state.events.some((item) => item.id === clientId)
+    ? state.events.map((item) => (item.id === clientId ? queuedEvent : item))
+    : [...state.events, queuedEvent];
+  cacheCurrentWorkspace();
+  return queuedEvent;
+}
+
+function queueOfflineEventDelete(eventId) {
+  const userId = currentUserId();
+  if (!userId) throw new Error('You need to be signed in before deleting offline changes.');
+  enqueueOfflineMutation(userId, {
+    type: 'deleteEvent',
+    event_id: eventId,
+  });
+  cacheCurrentWorkspace();
+}
+
+async function saveEventOfflineAware(event, offlineEvent = event) {
+  if (isOfflineNow()) return queueOfflineEventSave(offlineEvent);
+  try {
+    return await saveEvent(event);
+  } catch (error) {
+    if (!isConnectionError(error)) throw error;
+    return queueOfflineEventSave(offlineEvent);
+  }
+}
+
+async function deleteEventOfflineAware(eventId) {
+  if (isOfflineNow()) {
+    queueOfflineEventDelete(eventId);
+    return { offlineQueued: true };
+  }
+  try {
+    await deleteEvent(eventId);
+    return { offlineQueued: false };
+  } catch (error) {
+    if (!isConnectionError(error)) throw error;
+    queueOfflineEventDelete(eventId);
+    return { offlineQueued: true };
+  }
+}
+
+async function syncPendingOfflineChanges({ silent = false } = {}) {
+  const userId = currentUserId();
+  if (!userId || offlineSyncInFlight || isOfflineNow()) return;
+
+  let queue = readOfflineQueue(userId);
+  if (!queue.length) return;
+
+  offlineSyncInFlight = true;
+  let synced = 0;
+  try {
+    while (queue.length) {
+      const mutation = queue[0];
+      try {
+        if (mutation.type === 'saveEvent' && mutation.event) {
+          const localId = mutation.client_id || mutation.event.id;
+          const event = isLocalEventId(mutation.event.id)
+            ? { ...mutation.event, id: null }
+            : mutation.event;
+          const saved = await saveEvent(event);
+          const replaced = state.events.some((item) => item.id === localId || item.id === saved.id);
+          state.events = replaced
+            ? state.events.map((item) =>
+                item.id === localId || item.id === saved.id ? saved : item,
+              )
+            : [...state.events, saved];
+          queue = queue.slice(1);
+          if (localId && localId !== saved.id) {
+            queue = replaceQueuedEventId(queue, localId, saved.id);
+          }
+        } else if (mutation.type === 'deleteEvent' && mutation.event_id) {
+          if (!isLocalEventId(mutation.event_id)) await deleteEvent(mutation.event_id);
+          state.events = state.events.filter((item) => item.id !== mutation.event_id);
+          queue = queue.slice(1);
+        } else {
+          queue = queue.slice(1);
+        }
+
+        synced += 1;
+        writeOfflineQueue(userId, queue);
+        cacheCurrentWorkspace();
+      } catch (error) {
+        if (isConnectionError(error)) {
+          if (!silent) showOfflineCacheToast('Still offline. Changes will sync later.');
+          break;
+        }
+        console.warn('[offline] sync failed', error);
+        if (!silent) showToast(error.message || 'Some offline changes could not be synced.');
+        break;
+      }
+    }
+
+    if (synced) {
+      markLocalMutation();
+      renderAll();
+      if (!silent) {
+        showToast(queue.length ? 'Some offline changes synced.' : 'Offline changes synced.');
+      }
+      if (!queue.length) await refreshEventsAndRender();
+    }
+  } finally {
+    offlineSyncInFlight = false;
   }
 }
 
@@ -523,29 +705,39 @@ function bindUiEvents() {
 
 async function loadWorkspace() {
   renderUser();
+  const cached = cachedWorkspace();
   const [profile, calendars, tags, templates] = await Promise.all([
-    loadProfileSafely(),
-    loadCalendarsSafely(),
-    loadTagsSafely(),
-    loadQuickAddTemplatesSafely(),
+    loadProfileSafely(cached?.profile),
+    loadCalendarsSafely(cached?.calendars || []),
+    loadTagsSafely(cached?.tags || []),
+    loadQuickAddTemplatesSafely(cached?.quickAddTemplates || []),
   ]);
   state.profile = profile;
   renderUser();
   state.calendars = uniqueById(calendars);
   state.tags = uniqueById(tags);
   state.quickAddTemplates = uniqueById(templates);
-  state.activeCalendarId = state.calendars.find((calendar) => !calendar.archived_at)?.id || null;
+  state.events = eventsWithPendingOfflineChanges(cached?.events || state.events);
+  state.activeCalendarId =
+    state.calendars.find((calendar) => calendar.id === cached?.activeCalendarId)?.id ||
+    state.calendars.find((calendar) => !calendar.archived_at)?.id ||
+    null;
   syncSelectedTags();
   setActivePanel('calendar');
+  renderAll();
   await setupRealtime();
+  await syncPendingOfflineChanges({ silent: true });
   await refreshEventsAndRender();
+  cacheCurrentWorkspace();
 }
 
-async function loadProfileSafely() {
+async function loadProfileSafely(fallback = null) {
+  if (isOfflineNow() && fallback) return fallback;
   try {
     return await fetchProfile(state.session?.user);
   } catch (error) {
     console.warn('[profile] fetch failed', error);
+    if (isConnectionError(error) && fallback) return fallback;
     return {
       id: state.session?.user?.id || null,
       email: state.session?.user?.email || '',
@@ -554,26 +746,41 @@ async function loadProfileSafely() {
   }
 }
 
-async function loadCalendarsSafely() {
+async function loadCalendarsSafely(fallback = []) {
+  if (isOfflineNow() && fallback.length) {
+    showOfflineCacheToast();
+    return fallback;
+  }
   try {
     return await fetchCalendars();
   } catch (error) {
-    showToast('Calendar data could not be loaded. Check Supabase setup.');
-    return [];
+    if (isConnectionError(error) && fallback.length) {
+      showOfflineCacheToast();
+      return fallback;
+    }
+    showToast(
+      isConnectionError(error)
+        ? 'Offline. Open once online to save calendar data for offline use.'
+        : 'Calendar data could not be loaded. Check Supabase setup.',
+    );
+    return fallback;
   }
 }
 
-async function loadTagsSafely() {
+async function loadTagsSafely(fallback = []) {
+  if (isOfflineNow() && fallback.length) return fallback;
   try {
     return await fetchTags();
   } catch (error) {
+    if (isConnectionError(error) && fallback.length) return fallback;
     showToast('Run supabase/2026-05-calendar-scoped-tags.sql to enable per-calendar tags.');
     console.warn('[tags] fetch failed', error);
-    return [];
+    return fallback;
   }
 }
 
-async function loadQuickAddTemplatesSafely() {
+async function loadQuickAddTemplatesSafely(fallback = []) {
+  if (isOfflineNow() && fallback.length) return fallback;
   try {
     const { rows, missingTable } = await fetchQuickAddTemplates();
     if (missingTable) {
@@ -583,8 +790,9 @@ async function loadQuickAddTemplatesSafely() {
     }
     return rows;
   } catch (error) {
+    if (isConnectionError(error) && fallback.length) return fallback;
     showToast('Quick-add templates could not be loaded.');
-    return [];
+    return fallback;
   }
 }
 
@@ -599,6 +807,7 @@ async function handleProfileSubmit(event) {
     renderUser();
     renderMonthEntryScopeToggle();
     renderCalendar();
+    cacheCurrentWorkspace();
     showToast('Nickname saved.');
   } catch (error) {
     if (els.profileMessage) {
@@ -622,13 +831,29 @@ async function refreshEventsAndRender() {
     return;
   }
 
+  if (isOfflineNow()) {
+    const cached = cachedWorkspace();
+    state.events = eventsWithPendingOfflineChanges(cached?.events || state.events);
+    renderAll();
+    showOfflineCacheToast();
+    return;
+  }
+
   try {
     const events = await fetchEvents(calendarIds, rangeStart, rangeEnd);
     if (requestId !== refreshRequestId) return;
-    state.events = events;
+    state.events = eventsWithPendingOfflineChanges(events);
     renderAll();
     scheduleReminders();
+    cacheCurrentWorkspace();
   } catch (error) {
+    if (isConnectionError(error)) {
+      const cached = cachedWorkspace();
+      state.events = eventsWithPendingOfflineChanges(cached?.events || state.events);
+      renderAll();
+      showOfflineCacheToast();
+      return;
+    }
     showToast(error.message || 'Events could not be loaded.');
   }
 }
@@ -642,6 +867,14 @@ async function loadFocusEvents() {
     return;
   }
 
+  if (isOfflineNow()) {
+    const cached = cachedWorkspace();
+    state.events = eventsWithPendingOfflineChanges(cached?.events || state.events);
+    renderAll();
+    showOfflineCacheToast();
+    return;
+  }
+
   const requestId = ++refreshRequestId;
   const today = startOfDay(new Date());
   const rangeStart = addDays(today, -FOCUS_EVENT_HISTORY_DAYS);
@@ -650,16 +883,28 @@ async function loadFocusEvents() {
   try {
     const events = await fetchEvents(calendarIds, rangeStart, rangeEnd);
     if (requestId !== refreshRequestId) return;
-    state.events = uniqueById([...events, ...state.events]);
+    state.events = eventsWithPendingOfflineChanges(uniqueById([...events, ...state.events]));
     renderAll();
     scheduleReminders();
+    cacheCurrentWorkspace();
   } catch (error) {
+    if (isConnectionError(error)) {
+      const cached = cachedWorkspace();
+      state.events = eventsWithPendingOfflineChanges(cached?.events || state.events);
+      renderAll();
+      showOfflineCacheToast();
+      return;
+    }
     showToast(error.message || 'Focus items could not be loaded.');
   }
 }
 
 async function setupRealtime() {
   await removeChannel(state.realtimeChannel);
+  if (isOfflineNow()) {
+    state.realtimeChannel = null;
+    return;
+  }
   const calendarIds = state.calendars
     .filter((calendar) => !calendar.archived_at || state.showArchivedCalendars)
     .map((calendar) => calendar.id);
@@ -677,6 +922,7 @@ async function setupRealtime() {
         state.tags = uniqueById(await fetchTags());
         syncSelectedTags();
         renderAll();
+        cacheCurrentWorkspace();
       } catch (error) {
         console.warn('[tags] refresh after realtime failed', error);
       }
@@ -743,14 +989,15 @@ async function handleEventSubmit(event) {
       : [...state.events, optimisticEvent];
     renderAll();
 
-    const saved = await saveEvent(payload);
+    const saved = await saveEventOfflineAware(payload, optimisticEvent);
     markLocalMutation();
     state.events = state.events.map((item) =>
       item.id === temporaryId || item.id === saved.id ? saved : item,
     );
     renderAll();
+    cacheCurrentWorkspace();
     els.eventModal.close();
-    showToast('Event saved');
+    showToast(saved.__offlineQueued ? 'Saved offline. Syncs when you are online.' : 'Event saved');
   } catch (error) {
     if (previousEvents) {
       state.events = previousEvents;
@@ -782,15 +1029,21 @@ async function handleDeleteEvent() {
   els.eventModal.close();
 
   try {
+    let queuedOffline = false;
     await withOptimisticUpdate({
       apply: () => {
         state.events = state.events.filter((item) => item.id !== eventId);
       },
-      persist: () => deleteEvent(eventId),
+      persist: async () => {
+        const result = await deleteEventOfflineAware(eventId);
+        queuedOffline = Boolean(result?.offlineQueued);
+        return result;
+      },
       errorMessage: (error) => error.message || 'Event could not be deleted.',
     });
     markLocalMutation();
-    showToast('Event deleted');
+    cacheCurrentWorkspace();
+    showToast(queuedOffline ? 'Deleted offline. Syncs when you are online.' : 'Event deleted');
   } catch {
     // rollback + toast handled inside withOptimisticUpdate
   } finally {
@@ -842,6 +1095,7 @@ async function handleSaveTag(event) {
     syncSelectedTags();
     els.tagModal.close();
     renderAll();
+    cacheCurrentWorkspace();
     showToast(tag.id ? 'Tag updated' : 'Tag created');
   } catch (error) {
     els.tagError.textContent = error.message;
@@ -912,6 +1166,7 @@ async function handleConfirmDeleteTag(event) {
     state.tags = uniqueById(await fetchTags());
     syncSelectedTags();
     await refreshEventsAndRender();
+    cacheCurrentWorkspace();
     showToast(`Tag deleted${reassigned.length ? ` — ${reassigned.length} event${reassigned.length === 1 ? '' : 's'} reassigned to ${target.name}.` : '.'}`);
   } catch (error) {
     console.warn('[tags] delete failed', error);
@@ -942,6 +1197,7 @@ async function handleSaveQuickAddTemplate(event) {
     }
     els.quickAddTemplateModal.close();
     renderAll();
+    cacheCurrentWorkspace();
   } catch (error) {
     if (error.code === '23505' || /duplicate key/i.test(error.message || '')) {
       els.quickAddTemplateError.textContent = 'A quick-add with that shortcut already exists.';
@@ -966,6 +1222,7 @@ async function handleDeleteQuickAddTemplate(templateId) {
     state.quickAddTemplates = state.quickAddTemplates.filter((item) => item.id !== templateId);
     if (els.quickAddTemplateModal.open) els.quickAddTemplateModal.close();
     renderAll();
+    cacheCurrentWorkspace();
     showToast('Quick-add deleted');
   } catch (error) {
     if (els.quickAddTemplateModal.open) {
@@ -1054,17 +1311,27 @@ async function handleToggleComplete(eventId) {
   }
 
   const nextCompleted = !event.completed;
+  const updatedEvent = { ...event, completed: nextCompleted };
 
   try {
     await withOptimisticUpdate({
       apply: () => {
         state.events = state.events.map((item) =>
-          item.id === eventId ? { ...item, completed: nextCompleted } : item,
+          item.id === eventId ? updatedEvent : item,
         );
       },
-      persist: () => setEventCompleted(eventId, nextCompleted),
+      persist: async () => {
+        if (isOfflineNow()) return saveEventOfflineAware(updatedEvent);
+        try {
+          return await setEventCompleted(eventId, nextCompleted);
+        } catch (error) {
+          if (!isConnectionError(error)) throw error;
+          return queueOfflineEventSave(updatedEvent);
+        }
+      },
     });
     markLocalMutation();
+    cacheCurrentWorkspace();
   } catch {
     // rollback + toast handled inside withOptimisticUpdate
   }
@@ -1087,13 +1354,21 @@ async function handleRestoreFocusItem(eventId) {
       apply: () => {
         state.events = state.events.map((item) => (item.id === eventId ? restored : item));
       },
-      persist: () =>
-        isTaskEvent(event) && event.completed
-          ? setEventCompleted(eventId, false)
-          : saveEvent(restored),
+      persist: async () => {
+        if (isOfflineNow()) return saveEventOfflineAware(restored);
+        try {
+          return isTaskEvent(event) && event.completed
+            ? await setEventCompleted(eventId, false)
+            : await saveEvent(restored);
+        } catch (error) {
+          if (!isConnectionError(error)) throw error;
+          return queueOfflineEventSave(restored);
+        }
+      },
       errorMessage: (error) => error.message || 'Could not restore this item.',
     });
     markLocalMutation();
+    cacheCurrentWorkspace();
     showToast(isTaskEvent(event) ? 'Task restored' : 'Event moved to today');
   } catch {
     // rollback + toast handled inside withOptimisticUpdate
@@ -1147,10 +1422,11 @@ async function handleEventDrop(event) {
       apply: () => {
         state.events = state.events.map((item) => (item.id === eventId ? moved : item));
       },
-      persist: () => saveEvent(moved),
+      persist: () => saveEventOfflineAware(moved),
       errorMessage: (error) => error.message || 'Event could not be moved.',
     });
     markLocalMutation();
+    cacheCurrentWorkspace();
     showToast('Event moved');
   } catch {
     // rollback + toast handled inside withOptimisticUpdate
@@ -1337,9 +1613,12 @@ function bindLifecycleEvents() {
     }
   });
   window.addEventListener('focus', recoverAfterResume);
-  window.addEventListener('offline', () => showToast('Offline. Changes will need a connection.'));
+  window.addEventListener('offline', () =>
+    showToast('Offline. You can keep using saved calendar data.'),
+  );
   window.addEventListener('online', () => {
     showToast('Back online. Syncing...');
+    void syncPendingOfflineChanges();
     recoverAfterResume();
   });
   window.addEventListener('pageshow', (event) => {
@@ -1377,23 +1656,28 @@ async function recoverAfterResume() {
       return;
     }
 
+    const cached = cachedWorkspace();
     renderUser();
     const [calendars, tags, templates] = await Promise.all([
-      loadCalendarsSafely(),
-      loadTagsSafely(),
-      loadQuickAddTemplatesSafely(),
+      loadCalendarsSafely(cached?.calendars || state.calendars),
+      loadTagsSafely(cached?.tags || state.tags),
+      loadQuickAddTemplatesSafely(cached?.quickAddTemplates || state.quickAddTemplates),
     ]);
     state.calendars = uniqueById(calendars);
     state.tags = uniqueById(tags);
     state.quickAddTemplates = uniqueById(templates);
+    state.events = eventsWithPendingOfflineChanges(cached?.events || state.events);
     state.activeCalendarId =
       state.calendars.find((calendar) => calendar.id === activeCalendarId)?.id ||
-      state.calendars[0]?.id ||
+      state.calendars.find((calendar) => calendar.id === cached?.activeCalendarId)?.id ||
+      state.calendars.find((calendar) => !calendar.archived_at)?.id ||
       null;
     syncSelectedTags();
     setActivePanel(activePanel);
     await setupRealtime();
+    await syncPendingOfflineChanges({ silent: true });
     await refreshEventsAndRender();
+    cacheCurrentWorkspace();
   } catch (error) {
     showToast(error.message || 'Sync could not be restored.');
   } finally {

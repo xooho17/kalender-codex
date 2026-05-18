@@ -29,7 +29,10 @@ export async function getSession() {
   // session.user is enough to keep them logged in until the next request
   // succeeds. Only treat an explicit "user not found" (no error, no user)
   // as a real logout signal.
-  const { data: userData, error: userError } = await supabase.auth.getUser();
+  const { data: userData, error: userError } = await withTimeout(
+    supabase.auth.getUser(),
+    'Session check',
+  ).catch((error) => ({ data: null, error }));
   if (!userError && userData?.user) {
     return { ...data.session, user: userData.user };
   }
@@ -92,14 +95,20 @@ export function resetRealtime() {
 }
 
 export async function fetchCalendars() {
-  let { data, error } = await supabase
-    .from('calendar_members')
-    .select('role, calendars(id, name, color, owner_id, archived_at, created_at)');
+  let { data, error } = await withTimeout(
+    supabase
+      .from('calendar_members')
+      .select('role, calendars(id, name, color, owner_id, archived_at, created_at)'),
+    'Load calendars',
+  );
 
   if (error && error.message?.includes('archived_at')) {
-    ({ data, error } = await supabase
-      .from('calendar_members')
-      .select('role, calendars(id, name, color, owner_id, created_at)'));
+    ({ data, error } = await withTimeout(
+      supabase
+        .from('calendar_members')
+        .select('role, calendars(id, name, color, owner_id, created_at)'),
+      'Load calendars',
+    ));
   }
 
   if (error) throw error;
@@ -147,10 +156,13 @@ export async function updateCalendarArchive(id, archived) {
 // Returns every tag the signed-in user can see across all their member
 // calendars. RLS does the filtering; no client-side filter required.
 export async function fetchTags() {
-  const { data, error } = await supabase
-    .from('tags')
-    .select('id, calendar_id, user_id, name, color, created_at, updated_at')
-    .order('created_at', { ascending: true });
+  const { data, error } = await withTimeout(
+    supabase
+      .from('tags')
+      .select('id, calendar_id, user_id, name, color, created_at, updated_at')
+      .order('created_at', { ascending: true }),
+    'Load tags',
+  );
 
   if (error) throw error;
   return uniqueRowsById(data || []);
@@ -220,10 +232,13 @@ export async function countEventsUsingTag(tagId) {
 // (migration not run yet) we resolve to [] rather than throw, so the rest of
 // the app keeps working. Anything else still bubbles up.
 export async function fetchQuickAddTemplates() {
-  const { data, error } = await supabase
-    .from('quick_add_templates')
-    .select('*')
-    .order('created_at', { ascending: true });
+  const { data, error } = await withTimeout(
+    supabase
+      .from('quick_add_templates')
+      .select('*')
+      .order('created_at', { ascending: true }),
+    'Load quick-add templates',
+  );
   if (error) {
     if (error.code === '42P01' || /quick_add_templates/i.test(error.message || '')) {
       return { rows: [], missingTable: true };
@@ -253,18 +268,24 @@ export async function createQuickAddTemplate(payload) {
 
 export async function fetchProfile(user) {
   if (!user?.id) return null;
-  let { data, error } = await supabase
-    .from('profiles')
-    .select('id, email, display_name')
-    .eq('id', user.id)
-    .maybeSingle();
+  let { data, error } = await withTimeout(
+    supabase
+      .from('profiles')
+      .select('id, email, display_name')
+      .eq('id', user.id)
+      .maybeSingle(),
+    'Load profile',
+  );
 
   if (isMissingProfileDisplayNameColumn(error)) {
-    ({ data, error } = await supabase
-      .from('profiles')
-      .select('id, email')
-      .eq('id', user.id)
-      .maybeSingle());
+    ({ data, error } = await withTimeout(
+      supabase
+        .from('profiles')
+        .select('id, email')
+        .eq('id', user.id)
+        .maybeSingle(),
+      'Load profile',
+    ));
     if (error) throw error;
     return {
       id: user.id,
@@ -340,13 +361,16 @@ export async function shareCalendar({ calendar_id, email, role }) {
 export async function fetchEvents(calendarIds, rangeStart, rangeEnd) {
   if (!calendarIds.length) return [];
 
-  const { data, error } = await supabase
-    .from('events')
-    .select('*')
-    .in('calendar_id', calendarIds)
-    .lte('starts_at', rangeEnd.toISOString())
-    .gte('ends_at', rangeStart.toISOString())
-    .order('starts_at', { ascending: true });
+  const { data, error } = await withTimeout(
+    supabase
+      .from('events')
+      .select('*')
+      .in('calendar_id', calendarIds)
+      .lte('starts_at', rangeEnd.toISOString())
+      .gte('ends_at', rangeStart.toISOString())
+      .order('starts_at', { ascending: true }),
+    'Load events',
+  );
 
   if (error) throw error;
   return withCreatorProfiles(uniqueRowsById(data || []));
@@ -357,9 +381,12 @@ async function withCreatorProfiles(events) {
   if (!eventIds.length) return events;
 
   try {
-    const { data, error } = await supabase.rpc('event_creator_profiles', {
-      target_event_ids: eventIds,
-    });
+    const { data, error } = await withTimeout(
+      supabase.rpc('event_creator_profiles', {
+        target_event_ids: eventIds,
+      }),
+      'Load event creators',
+    );
     if (error) throw error;
     const profileById = new Map((data || []).map((profile) => [profile.id, profile]));
     return events.map((event) => ({

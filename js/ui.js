@@ -850,7 +850,11 @@ function renderMonth() {
             : '';
           return `
             <span class="event-pill ${eventPillClass(event, day)} ${labelClass}" draggable="true" data-event-id="${event.id}" aria-label="${escapeHtml(event.title)}" style="--event-color:${safeColor(monthEventColor(event))}; ${labelStyle}">
-              ${labelMeta ? `<span class="event-pill-label">${escapeHtml(event.title)}</span>` : ''}
+              ${
+                labelMeta
+                  ? `<span class="event-pill-label"><span class="event-pill-text">${escapeHtml(event.title)}</span></span>`
+                  : ''
+              }
             </span>
           `;
         }).join('')}

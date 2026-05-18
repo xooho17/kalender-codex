@@ -543,12 +543,23 @@ textarea:focus {
   display: flex;
   width: var(--event-label-width, 100%);
   min-width: 0;
+  height: 13px;
   align-items: center;
   justify-content: center;
   overflow: hidden;
   padding: 0 5px;
-  text-overflow: ellipsis;
+  line-height: 13px;
   pointer-events: none;
+}
+
+.event-pill-text {
+  display: block;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .event-pill.continues-left {
