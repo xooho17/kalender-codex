@@ -825,7 +825,7 @@ function renderMonth() {
 
   els.calendarGrid.className = 'calendar-grid month-grid';
   els.calendarGrid.innerHTML = weekHeaderHtml();
-  days.forEach((day) => {
+  days.forEach((day, dayIndex) => {
     const dayEvents = visibleMonthEvents()
       .filter((event) => eventOccursOn(event, day))
       .map((event) => ({ event, lane: monthLayout.laneByEventId.get(event.id) ?? 99 }))
@@ -843,9 +843,14 @@ function renderMonth() {
           const entry = dayEvents.find((item) => item.lane === lane);
           if (!entry) return '<span class="event-lane-spacer" aria-hidden="true"></span>';
           const event = entry.event;
+          const labelMeta = monthLayout.labelMetaByEventId.get(event.id)?.get(dayIndex);
+          const labelClass = labelMeta ? 'has-label' : '';
+          const labelStyle = labelMeta
+            ? `--event-label-left:${labelMeta.leftPercent}%; --event-label-width:${labelMeta.widthPercent}%;`
+            : '';
           return `
-            <span class="event-pill ${eventPillClass(event, day)}" draggable="true" data-event-id="${event.id}" style="--event-color:${safeColor(monthEventColor(event))}">
-              ${escapeHtml(event.title)}
+            <span class="event-pill ${eventPillClass(event, day)} ${labelClass}" draggable="true" data-event-id="${event.id}" aria-label="${escapeHtml(event.title)}" style="--event-color:${safeColor(monthEventColor(event))}; ${labelStyle}">
+              ${labelMeta ? `<span class="event-pill-label">${escapeHtml(event.title)}</span>` : ''}
             </span>
           `;
         }).join('')}
@@ -864,6 +869,7 @@ function buildMonthEventLayout(days) {
         .filter((index) => index !== -1);
       return {
         event,
+        indexes,
         startIndex: indexes[0],
         endIndex: indexes[indexes.length - 1],
       };
@@ -879,14 +885,62 @@ function buildMonthEventLayout(days) {
 
   const laneEnds = [];
   const laneByEventId = new Map();
-  visible.forEach(({ event, startIndex, endIndex }) => {
+  const labelMetaByEventId = new Map();
+  visible.forEach(({ event, indexes, startIndex, endIndex }) => {
     let lane = laneEnds.findIndex((lastEnd) => lastEnd < startIndex);
     if (lane === -1) lane = laneEnds.length;
     laneEnds[lane] = endIndex;
     laneByEventId.set(event.id, lane);
+    labelMetaByEventId.set(event.id, monthEventLabelMeta(indexes, days));
   });
 
-  return { laneByEventId };
+  return { laneByEventId, labelMetaByEventId };
+}
+
+function monthEventLabelMeta(indexes, days) {
+  const meta = new Map();
+  if (!indexes.length) return meta;
+
+  monthEventSegments(indexes).forEach(([startIndex, endIndex]) => {
+    const segmentIndexes = indexesBetween(startIndex, endIndex);
+    const currentMonthIndexes = segmentIndexes.filter((index) => sameMonth(days[index], state.selectedDate));
+    const labelIndexes = currentMonthIndexes.length ? currentMonthIndexes : segmentIndexes;
+    const labelIndex = labelIndexes[Math.floor((labelIndexes.length - 1) / 2)];
+    meta.set(labelIndex, {
+      leftPercent: (labelIndex - startIndex) * -100,
+      widthPercent: (endIndex - startIndex + 1) * 100,
+    });
+  });
+
+  return meta;
+}
+
+function monthEventSegments(indexes) {
+  const segments = [];
+  let startIndex = indexes[0];
+  let previousIndex = indexes[0];
+
+  indexes.slice(1).forEach((index) => {
+    const sameWeekRow = Math.floor(index / 7) === Math.floor(previousIndex / 7);
+    if (index === previousIndex + 1 && sameWeekRow) {
+      previousIndex = index;
+      return;
+    }
+    segments.push([startIndex, previousIndex]);
+    startIndex = index;
+    previousIndex = index;
+  });
+
+  segments.push([startIndex, previousIndex]);
+  return segments;
+}
+
+function indexesBetween(startIndex, endIndex) {
+  return Array.from({ length: endIndex - startIndex + 1 }, (_, offset) => startIndex + offset);
+}
+
+function sameMonth(day, monthDate) {
+  return day.getMonth() === monthDate.getMonth() && day.getFullYear() === monthDate.getFullYear();
 }
 
 function monthEntryScopeMeta(scope) {

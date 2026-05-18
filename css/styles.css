@@ -530,6 +530,27 @@ textarea:focus {
   white-space: nowrap;
 }
 
+.event-pill.has-label {
+  z-index: 2;
+  overflow: visible;
+}
+
+.event-pill-label {
+  position: absolute;
+  top: 1px;
+  bottom: 1px;
+  left: var(--event-label-left, 0);
+  display: flex;
+  width: var(--event-label-width, 100%);
+  min-width: 0;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  padding: 0 5px;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}
+
 .event-pill.continues-left {
   border-top-left-radius: 0;
   border-bottom-left-radius: 0;
